@@ -51,7 +51,8 @@ const App = () => {
   const [tagOffsets, setTagOffsets] = useState([]);
   
   // --- 雲端儲存 (GAS) 相關狀態 ---
-  const [gasUrl, setGasUrl] = useState('');
+  // 將您的 GAS 網址設為預設值
+  const [gasUrl, setGasUrl] = useState('https://script.google.com/macros/s/AKfycbz56mtEvhynoY7CqJ7PKU0t5DMZDRWFta9fUQdrPAuxlGqCQ_hg5Fhe11JlSF9vORAJeQ/exec');
   const [projectName, setProjectName] = useState('雙11促銷樣板');
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingList, setIsLoadingList] = useState(false);
@@ -73,6 +74,7 @@ const App = () => {
   };
 
   useEffect(() => {
+    // 若使用者之前有存過不同的網址，仍會優先載入使用者的設定，否則使用預設值
     const savedUrl = localStorage.getItem('ManiFactory_GAS_URL');
     if (savedUrl) setGasUrl(savedUrl);
   }, []);
