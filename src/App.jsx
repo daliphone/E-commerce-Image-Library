@@ -10,7 +10,10 @@ const App = () => {
   const [removeBg, setRemoveBg] = useState(true);
 
   // --- UI 面板拖曳寬度狀態 ---
-  const [leftWidth, setLeftWidth] = useState(560); // 預設左側面板寬度
+  const [leftWidth, setLeftWidth] = useState(560); 
+
+  // --- 拖放上傳 (Drag & Drop) 狀態 ---
+  const [isDragActive, setIsDragActive] = useState(false);
 
   // 平台主題配色
   const THEMES = {
@@ -46,12 +49,12 @@ const App = () => {
   const [iconScale, setIconScale] = useState(30);
 
   // --- 互動拖曳相關狀態 (獨立位移) ---
+  const [productOffset, setProductOffset] = useState({ x: 0, y: 0 }); // 新增：商品主圖位移
   const [titleOffset, setTitleOffset] = useState({ x: 0, y: 0 });
   const [iconOffset, setIconOffset] = useState({ x: 150, y: -150 });
   const [tagOffsets, setTagOffsets] = useState([]);
   
   // --- 雲端儲存 (GAS) 相關狀態 ---
-  // 將您的 GAS 網址設為預設值
   const [gasUrl, setGasUrl] = useState('https://script.google.com/macros/s/AKfycbz56mtEvhynoY7CqJ7PKU0t5DMZDRWFta9fUQdrPAuxlGqCQ_hg5Fhe11JlSF9vORAJeQ/exec');
   const [projectName, setProjectName] = useState('雙11促銷樣板');
   const [isSaving, setIsSaving] = useState(false);
@@ -61,7 +64,8 @@ const App = () => {
   const [cloudMessage, setCloudMessage] = useState({ text: '', type: '' });
 
   const canvasRef = useRef(null);
-  const hitBoxes = useRef({ title: null, icon: null, tags: [] });
+  // 新增 product 碰撞邊界
+  const hitBoxes = useRef({ product: null, title: null, icon: null, tags: [] });
   const dragInfo = useRef({ isDragging: false, target: null, startX: 0, startY: 0, initialOffset: {x:0, y:0} });
 
   const BANNED_WORDS = ['第一', '最強', '最優', '療效', '根治', '殺頭價', '保證見效'];
@@ -74,7 +78,6 @@ const App = () => {
   };
 
   useEffect(() => {
-    // 若使用者之前有存過不同的網址，仍會優先載入使用者的設定，否則使用預設值
     const savedUrl = localStorage.getItem('ManiFactory_GAS_URL');
     if (savedUrl) setGasUrl(savedUrl);
   }, []);
@@ -97,6 +100,28 @@ const App = () => {
   const handleImageUpload = (e, setter) => {
     const file = e.target.files[0];
     if (file) {
+      const reader = new FileReader();
+      reader.onload = (f) => setter(f.target.result);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // --- 拖放 (Drag & Drop) 事件處理 ---
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragActive(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setIsDragActive(false);
+  };
+
+  const handleDrop = (e, setter) => {
+    e.preventDefault();
+    setIsDragActive(false);
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
       const reader = new FileReader();
       reader.onload = (f) => setter(f.target.result);
       reader.readAsDataURL(file);
@@ -136,7 +161,8 @@ const App = () => {
     const payload = {
       projectName, platform, template, removeBg, primaryColor, accentColor, textColor,
       brandText, promoText, tagsInput, isAiDisclosure, tagShape, showLogo, showTitle, showTags,
-      titleFont, tagFont, productScale, textScale, tagScale, iconScale, titleOffset, iconOffset, tagOffsets,
+      titleFont, tagFont, productScale, textScale, tagScale, iconScale, 
+      productOffset, titleOffset, iconOffset, tagOffsets, // 加入 productOffset
       imageBase64: image, 
       iconImageBase64: iconImage
     };
@@ -192,6 +218,9 @@ const App = () => {
     setTagFont(params.tagFont); setProductScale(params.productScale); setTextScale(params.textScale);
     setTagScale(params.tagScale); setIconScale(params.iconScale); setTitleOffset(params.titleOffset);
     setIconOffset(params.iconOffset); setTagOffsets(params.tagOffsets);
+    
+    // 兼容舊版資料（舊版只有 Y 軸 offset）
+    setProductOffset(params.productOffset || { x: 0, y: params.productOffsetY || 0 });
 
     if (params.savedMainImageUrl) setImage(params.savedMainImageUrl);
     if (params.savedIconImageUrl) setIconImage(params.savedIconImageUrl);
@@ -211,10 +240,20 @@ const App = () => {
   };
 
   const handleMouseDown = (e) => {
-    if (!activeTheme.allowText) return;
+    if (!activeTheme.allowText && platform === 'Momo') {
+        // Momo 模式下，允許拖拉商品主圖
+        const { x, y } = getMousePos(e);
+        const boxes = hitBoxes.current;
+        if (image && boxes.product && x >= boxes.product.x && x <= boxes.product.x + boxes.product.w && y >= boxes.product.y && y <= boxes.product.y + boxes.product.h) {
+            dragInfo.current = { isDragging: true, target: { type: 'product' }, startX: x, startY: y, initialOffset: productOffset }; return;
+        }
+        return; 
+    }
+    
     const { x, y } = getMousePos(e);
     const boxes = hitBoxes.current;
 
+    // 判斷優先級：圖示 > 標籤 > 標題 > 商品主圖
     if (iconImage && boxes.icon && x >= boxes.icon.x && x <= boxes.icon.x + boxes.icon.w && y >= boxes.icon.y && y <= boxes.icon.y + boxes.icon.h) {
         dragInfo.current = { isDragging: true, target: { type: 'icon' }, startX: x, startY: y, initialOffset: iconOffset }; return;
     }
@@ -227,11 +266,16 @@ const App = () => {
     if (showTitle && boxes.title && x >= boxes.title.x && x <= boxes.title.x + boxes.title.w && y >= boxes.title.y && y <= boxes.title.y + boxes.title.h) {
         dragInfo.current = { isDragging: true, target: { type: 'title' }, startX: x, startY: y, initialOffset: titleOffset }; return;
     }
+    
+    // 如果都沒有點到文字/標籤，且點擊到商品主圖，則開始拖拉商品
+    if (image && boxes.product && x >= boxes.product.x && x <= boxes.product.x + boxes.product.w && y >= boxes.product.y && y <= boxes.product.y + boxes.product.h) {
+        dragInfo.current = { isDragging: true, target: { type: 'product' }, startX: x, startY: y, initialOffset: productOffset }; return;
+    }
   };
 
   const handleMouseMove = (e) => {
-    if (!activeTheme.allowText) return;
     const { x, y } = getMousePos(e);
+    
     if (dragInfo.current.isDragging) {
         const dx = x - dragInfo.current.startX;
         const dy = y - dragInfo.current.startY;
@@ -241,10 +285,15 @@ const App = () => {
         else if (target.type === 'tag') {
             setTagOffsets(prev => { const next = [...prev]; next[target.index] = { x: initialOffset.x + dx, y: initialOffset.y + dy }; return next; });
         }
+        else if (target.type === 'product') setProductOffset({ x: initialOffset.x + dx, y: initialOffset.y + dy });
+        
         canvasRef.current.style.cursor = 'grabbing'; return;
     }
+
     let isHovering = false;
     const boxes = hitBoxes.current;
+    
+    // Hover 判定邏輯，與點擊順序一致
     if (iconImage && boxes.icon && x >= boxes.icon.x && x <= boxes.icon.x + boxes.icon.w && y >= boxes.icon.y && y <= boxes.icon.y + boxes.icon.h) isHovering = true;
     if (!isHovering && showTitle && boxes.title && x >= boxes.title.x && x <= boxes.title.x + boxes.title.w && y >= boxes.title.y && y <= boxes.title.y + boxes.title.h) isHovering = true;
     if (!isHovering) {
@@ -253,11 +302,19 @@ const App = () => {
             if (box && x >= box.x && x <= box.x + box.w && y >= box.y && y <= box.y + box.h) { isHovering = true; break; }
         }
     }
+    // 檢查是否 hovering 商品圖片
+    if (!isHovering && image && boxes.product && x >= boxes.product.x && x <= boxes.product.x + boxes.product.w && y >= boxes.product.y && y <= boxes.product.y + boxes.product.h) isHovering = true;
+
     canvasRef.current.style.cursor = isHovering ? 'grab' : 'default';
   };
 
   const handleMouseUpOrLeave = () => { dragInfo.current.isDragging = false; dragInfo.current.target = null; if (canvasRef.current) canvasRef.current.style.cursor = 'default'; };
-  const resetPositions = () => { setTitleOffset({x: 0, y: 0}); setIconOffset({x: 150, y: -150}); setTagOffsets(tagOffsets.map(() => ({x: 0, y: 0}))); };
+  const resetPositions = () => { 
+      setTitleOffset({x: 0, y: 0}); 
+      setIconOffset({x: 150, y: -150}); 
+      setTagOffsets(tagOffsets.map(() => ({x: 0, y: 0}))); 
+      setProductOffset({x: 0, y: 0}); 
+  };
 
   // --- 畫布繪製 ---
   useEffect(() => {
@@ -267,7 +324,7 @@ const App = () => {
     const width = canvas.width;
     const height = canvas.height;
     
-    hitBoxes.current = { title: null, icon: null, tags: [] };
+    hitBoxes.current = { product: null, title: null, icon: null, tags: [] };
 
     const loadImg = (src) => new Promise((resolve) => {
         const img = new Image();
@@ -306,8 +363,15 @@ const App = () => {
         const finalScale = baseScale * (productScale / 100);
         const w = width * finalScale;
         const h = (mImg && mImg.width) ? ((mImg.height / mImg.width) * w) : w;
-        const x = (width - w) / 2 + (currentTemplate === 'TechBright' ? 60 : 0);
-        const y = (height - h) / 2 + baseYOffset;
+        
+        // 商品主圖加入 X/Y 的拖曳 Offset
+        const x = (width - w) / 2 + (currentTemplate === 'TechBright' ? 60 : 0) + productOffset.x;
+        const y = (height - h) / 2 + baseYOffset + productOffset.y;
+
+        // 記錄商品主圖的碰撞邊界
+        if (mImg) {
+            hitBoxes.current.product = { x, y, w, h };
+        }
 
         if (removeBg && mImg) { ctx.shadowColor = 'rgba(0,0,0,0.08)'; ctx.shadowBlur = 30; ctx.shadowOffsetY = 15; }
         
@@ -423,14 +487,14 @@ const App = () => {
         }
     };
     renderCanvas();
-  }, [image, iconImage, platform, template, promoText, tagsInput, brandText, isAiDisclosure, removeBg, primaryColor, accentColor, textColor, productScale, textScale, tagScale, tagShape, showLogo, showTitle, showTags, titleFont, tagFont, iconScale, titleOffset, iconOffset, tagOffsets]);
+  }, [image, iconImage, platform, template, promoText, tagsInput, brandText, isAiDisclosure, removeBg, primaryColor, accentColor, textColor, productScale, textScale, tagScale, tagShape, showLogo, showTitle, showTags, titleFont, tagFont, iconScale, titleOffset, iconOffset, tagOffsets, productOffset]);
 
   const complianceResult = checkCompliance(promoText + tagsInput);
 
   return (
     <div className="flex h-screen bg-slate-50 text-slate-800 font-sans overflow-hidden">
       
-      {/* ================= 左側控制面板 (支援動態寬度) ================= */}
+      {/* ================= 左側控制面板 ================= */}
       <div 
         className="bg-white border-r border-slate-200 flex flex-col shadow-2xl z-10 relative shrink-0"
         style={{ width: `${leftWidth}px` }}
@@ -438,7 +502,7 @@ const App = () => {
         <div style={{ background: activeTheme.gradient }} className="p-5 border-b text-white shrink-0 transition-colors duration-500">
           <h1 className="text-xl font-bold flex items-center gap-2 drop-shadow-sm">
             <ImageIcon className="w-6 h-6 text-white" />
-            馬尼製圖工廠 <span className="text-[10px] bg-white text-slate-900 px-2 py-0.5 rounded-full ml-1 font-black shadow-sm">自由寬度版</span>
+            馬尼製圖工廠 <span className="text-[10px] bg-white text-slate-900 px-2 py-0.5 rounded-full ml-1 font-black shadow-sm">全能拖曳版</span>
           </h1>
         </div>
 
@@ -497,18 +561,27 @@ const App = () => {
             </div>
           </section>
 
-          {/* 圖片上傳 */}
+          {/* 圖片上傳區 (支援 Drag & Drop) */}
           <section>
             <label className="block text-sm font-bold mb-2 flex items-center gap-2 text-slate-700">
-              <Camera className="w-4 h-4" style={{ color: activeTheme.main }} /> 1. 原廠商品圖
+              <Camera className="w-4 h-4" style={{ color: activeTheme.main }} /> 1. 原廠商品圖 (支援拖放上傳)
             </label>
-            <div className="border-2 border-dashed rounded-xl p-5 text-center transition-colors relative group cursor-pointer" style={{ backgroundColor: activeTheme.bg, borderColor: activeTheme.border }}>
+            <div 
+              className={`border-2 border-dashed rounded-xl p-5 text-center transition-all relative group cursor-pointer ${isDragActive ? 'border-sky-500 bg-sky-50 shadow-inner' : 'border-slate-200'}`} 
+              style={!isDragActive ? { backgroundColor: activeTheme.bg, borderColor: activeTheme.border } : {}}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, setImage)}
+            >
               <input type="file" onChange={(e)=>handleImageUpload(e, setImage)} className="hidden" id="img-upload" accept="image/*" />
-              <label htmlFor="img-upload" className="cursor-pointer block">
-                <div className="bg-white shadow-sm border border-slate-100 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3">
+              <label htmlFor="img-upload" className="cursor-pointer block pointer-events-none">
+                <div className="bg-white shadow-sm border border-slate-100 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
                   <Camera className="w-5 h-5" style={{ color: activeTheme.main }} />
                 </div>
-                <span className="text-sm font-bold" style={{ color: activeTheme.main }}>點擊上傳主圖</span>
+                <span className="text-sm font-bold" style={{ color: activeTheme.main }}>
+                  {isDragActive ? '放開以載入圖片' : '點擊或將圖片拖放至此'}
+                </span>
+                <p className="text-[10px] text-slate-400 mt-1">載入後可於右側畫布自由拖曳商品位置</p>
               </label>
             </div>
           </section>
@@ -641,8 +714,15 @@ const App = () => {
 
                 <div className="space-y-5">
                     <div className="bg-slate-50 p-4 rounded-lg border border-slate-100">
-                        <p className="text-xs font-black text-slate-600 mb-3 flex items-center gap-1"><Camera className="w-4 h-4"/> 商品主體縮放 ({productScale}%)</p>
+                        <div className="flex justify-between items-center mb-3">
+                            <p className="text-xs font-black text-slate-600 flex items-center gap-1"><Camera className="w-4 h-4"/> 商品主體縮放 ({productScale}%)</p>
+                            <span className="text-[10px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded">支援畫布拖曳</span>
+                        </div>
                         <input type="range" min="50" max="150" value={productScale} onChange={(e) => setProductScale(e.target.value)} className="w-full accent-slate-400" />
+                        <div className="mt-3 flex justify-between items-center">
+                             <p className="text-[10px] font-bold text-slate-500">垂直位移微調</p>
+                             <input type="range" min="-300" max="300" value={productOffset.y} onChange={(e) => setProductOffset({...productOffset, y: parseInt(e.target.value)})} className="w-1/2 accent-slate-400" />
+                        </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-5">
@@ -680,13 +760,12 @@ const App = () => {
         </div>
       </div>
 
-      {/* ================= 左右拖拉分隔線 (Draggable Divider) ================= */}
+      {/* ================= 左右拖拉分隔線 ================= */}
       <div 
         className="w-1.5 hover:w-2 bg-slate-200 hover:bg-sky-400 cursor-col-resize z-50 flex items-center justify-center transition-all shadow-[inset_1px_0_2px_rgba(0,0,0,0.05)] active:bg-sky-500 shrink-0 group relative"
         onMouseDown={(e) => {
           e.preventDefault();
           const handleMouseMove = (moveEvent) => {
-            // 限制左側面板寬度介於 400px 與 視窗寬度的 80% 之間
             const newWidth = Math.max(400, Math.min(moveEvent.clientX, window.innerWidth * 0.8));
             setLeftWidth(newWidth);
           };
