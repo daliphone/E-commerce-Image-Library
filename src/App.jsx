@@ -29,6 +29,7 @@ const App = () => {
   const [textColor, setTextColor] = useState('#1e293b'); 
   
   // 文案設定
+  const [logoText, setLogoText] = useState('BRAND'); // 新增：科技版 LOGO 文字
   const [brandText, setBrandText] = useState('官方授權店');
   const [promoText, setPromoText] = useState('GPLUS 智慧手機');
   const [tagsInput, setTagsInput] = useState('公司貨,極窄邊框,資安認證');
@@ -44,12 +45,13 @@ const App = () => {
 
   // 縮放設定
   const [productScale, setProductScale] = useState(100);
+  const [brandScale, setBrandScale] = useState(100); // 新增：徽章大小縮放
   const [textScale, setTextScale] = useState(100);
   const [tagScale, setTagScale] = useState(100);   
   const [iconScale, setIconScale] = useState(30);
 
   // --- 互動拖曳相關狀態 (獨立位移) ---
-  const [productOffset, setProductOffset] = useState({ x: 0, y: 0 }); // 新增：商品主圖位移
+  const [productOffset, setProductOffset] = useState({ x: 0, y: 0 });
   const [titleOffset, setTitleOffset] = useState({ x: 0, y: 0 });
   const [iconOffset, setIconOffset] = useState({ x: 150, y: -150 });
   const [tagOffsets, setTagOffsets] = useState([]);
@@ -64,7 +66,6 @@ const App = () => {
   const [cloudMessage, setCloudMessage] = useState({ text: '', type: '' });
 
   const canvasRef = useRef(null);
-  // 新增 product 碰撞邊界
   const hitBoxes = useRef({ product: null, title: null, icon: null, tags: [] });
   const dragInfo = useRef({ isDragging: false, target: null, startX: 0, startY: 0, initialOffset: {x:0, y:0} });
 
@@ -160,9 +161,9 @@ const App = () => {
 
     const payload = {
       projectName, platform, template, removeBg, primaryColor, accentColor, textColor,
-      brandText, promoText, tagsInput, isAiDisclosure, tagShape, showLogo, showTitle, showTags,
-      titleFont, tagFont, productScale, textScale, tagScale, iconScale, 
-      productOffset, titleOffset, iconOffset, tagOffsets, // 加入 productOffset
+      logoText, brandText, promoText, tagsInput, isAiDisclosure, tagShape, showLogo, showTitle, showTags,
+      titleFont, tagFont, productScale, brandScale, textScale, tagScale, iconScale, 
+      productOffset, titleOffset, iconOffset, tagOffsets,
       imageBase64: image, 
       iconImageBase64: iconImage
     };
@@ -212,14 +213,12 @@ const App = () => {
   const applyTemplate = async (params) => {
     setPlatform(params.platform); setTemplate(params.template); setRemoveBg(params.removeBg);
     setPrimaryColor(params.primaryColor); setAccentColor(params.accentColor); setTextColor(params.textColor);
-    setBrandText(params.brandText); setPromoText(params.promoText); setTagsInput(params.tagsInput);
+    setLogoText(params.logoText || 'BRAND'); setBrandText(params.brandText); setPromoText(params.promoText); setTagsInput(params.tagsInput);
     setIsAiDisclosure(params.isAiDisclosure); setTagShape(params.tagShape); setShowLogo(params.showLogo);
     setShowTitle(params.showTitle); setShowTags(params.showTags); setTitleFont(params.titleFont);
-    setTagFont(params.tagFont); setProductScale(params.productScale); setTextScale(params.textScale);
+    setTagFont(params.tagFont); setProductScale(params.productScale); setBrandScale(params.brandScale || 100); setTextScale(params.textScale);
     setTagScale(params.tagScale); setIconScale(params.iconScale); setTitleOffset(params.titleOffset);
     setIconOffset(params.iconOffset); setTagOffsets(params.tagOffsets);
-    
-    // 兼容舊版資料（舊版只有 Y 軸 offset）
     setProductOffset(params.productOffset || { x: 0, y: params.productOffsetY || 0 });
 
     if (params.savedMainImageUrl) setImage(params.savedMainImageUrl);
@@ -229,7 +228,6 @@ const App = () => {
     setCloudMessage({ text: '已成功套用樣板！', type: 'success' });
     setTimeout(() => setCloudMessage({ text: '', type: '' }), 3000);
   };
-
 
   const getMousePos = (e) => {
     const canvas = canvasRef.current;
@@ -241,7 +239,6 @@ const App = () => {
 
   const handleMouseDown = (e) => {
     if (!activeTheme.allowText && platform === 'Momo') {
-        // Momo 模式下，允許拖拉商品主圖
         const { x, y } = getMousePos(e);
         const boxes = hitBoxes.current;
         if (image && boxes.product && x >= boxes.product.x && x <= boxes.product.x + boxes.product.w && y >= boxes.product.y && y <= boxes.product.y + boxes.product.h) {
@@ -253,7 +250,6 @@ const App = () => {
     const { x, y } = getMousePos(e);
     const boxes = hitBoxes.current;
 
-    // 判斷優先級：圖示 > 標籤 > 標題 > 商品主圖
     if (iconImage && boxes.icon && x >= boxes.icon.x && x <= boxes.icon.x + boxes.icon.w && y >= boxes.icon.y && y <= boxes.icon.y + boxes.icon.h) {
         dragInfo.current = { isDragging: true, target: { type: 'icon' }, startX: x, startY: y, initialOffset: iconOffset }; return;
     }
@@ -266,8 +262,6 @@ const App = () => {
     if (showTitle && boxes.title && x >= boxes.title.x && x <= boxes.title.x + boxes.title.w && y >= boxes.title.y && y <= boxes.title.y + boxes.title.h) {
         dragInfo.current = { isDragging: true, target: { type: 'title' }, startX: x, startY: y, initialOffset: titleOffset }; return;
     }
-    
-    // 如果都沒有點到文字/標籤，且點擊到商品主圖，則開始拖拉商品
     if (image && boxes.product && x >= boxes.product.x && x <= boxes.product.x + boxes.product.w && y >= boxes.product.y && y <= boxes.product.y + boxes.product.h) {
         dragInfo.current = { isDragging: true, target: { type: 'product' }, startX: x, startY: y, initialOffset: productOffset }; return;
     }
@@ -293,7 +287,6 @@ const App = () => {
     let isHovering = false;
     const boxes = hitBoxes.current;
     
-    // Hover 判定邏輯，與點擊順序一致
     if (iconImage && boxes.icon && x >= boxes.icon.x && x <= boxes.icon.x + boxes.icon.w && y >= boxes.icon.y && y <= boxes.icon.y + boxes.icon.h) isHovering = true;
     if (!isHovering && showTitle && boxes.title && x >= boxes.title.x && x <= boxes.title.x + boxes.title.w && y >= boxes.title.y && y <= boxes.title.y + boxes.title.h) isHovering = true;
     if (!isHovering) {
@@ -302,7 +295,6 @@ const App = () => {
             if (box && x >= box.x && x <= box.x + box.w && y >= box.y && y <= box.y + box.h) { isHovering = true; break; }
         }
     }
-    // 檢查是否 hovering 商品圖片
     if (!isHovering && image && boxes.product && x >= boxes.product.x && x <= boxes.product.x + boxes.product.w && y >= boxes.product.y && y <= boxes.product.y + boxes.product.h) isHovering = true;
 
     canvasRef.current.style.cursor = isHovering ? 'grab' : 'default';
@@ -364,14 +356,10 @@ const App = () => {
         const w = width * finalScale;
         const h = (mImg && mImg.width) ? ((mImg.height / mImg.width) * w) : w;
         
-        // 商品主圖加入 X/Y 的拖曳 Offset
         const x = (width - w) / 2 + (currentTemplate === 'TechBright' ? 60 : 0) + productOffset.x;
         const y = (height - h) / 2 + baseYOffset + productOffset.y;
 
-        // 記錄商品主圖的碰撞邊界
-        if (mImg) {
-            hitBoxes.current.product = { x, y, w, h };
-        }
+        if (mImg) hitBoxes.current.product = { x, y, w, h };
 
         if (removeBg && mImg) { ctx.shadowColor = 'rgba(0,0,0,0.08)'; ctx.shadowBlur = 30; ctx.shadowOffsetY = 15; }
         
@@ -388,13 +376,25 @@ const App = () => {
             const tags = tagsInput.split(',').map(t => t.trim()).filter(t => t);
             const actualTextScale = textScale / 100;
             const actualTagScale = tagScale / 100;
+            const actualBrandScale = brandScale / 100; // 徽章縮放比例
 
             if (currentTemplate === 'LightSoft' || currentTemplate === 'LightClean') {
                 if (showLogo && brandText) {
-                    ctx.font = `bold 18px "${titleFont}"`;
-                    const textW = ctx.measureText(brandText).width + 60;
-                    ctx.fillStyle = primaryColor; roundRect(ctx, width/2 - textW/2, -10, textW, 50, 15);
-                    ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'center'; ctx.fillText(brandText, width/2, 28);
+                    const badgeFontSize = 18 * actualBrandScale;
+                    ctx.font = `bold ${badgeFontSize}px "${titleFont}"`;
+                    const textMetrics = ctx.measureText(brandText);
+                    const textW = textMetrics.width + (60 * actualBrandScale);
+                    const badgeH = 50 * actualBrandScale;
+                    const radius = 15 * actualBrandScale;
+                    const badgeY = -10;
+
+                    ctx.fillStyle = primaryColor; 
+                    roundRect(ctx, width/2 - textW/2, badgeY, textW, badgeH, radius);
+                    ctx.fillStyle = '#FFFFFF'; 
+                    ctx.textAlign = 'center'; 
+                    ctx.textBaseline = 'middle'; 
+                    ctx.fillText(brandText, width/2, badgeY + badgeH/2 + (2 * actualBrandScale));
+                    ctx.textBaseline = 'alphabetic';
                 }
                 if (showTitle) {
                     const fontSize = 36 * actualTextScale;
@@ -447,10 +447,25 @@ const App = () => {
                 ctx.fillStyle = hexToRgba(primaryColor, 0.1); ctx.beginPath();
                 ctx.moveTo(100, height); ctx.lineTo(250, height - 150); ctx.lineTo(width, height - 150); ctx.lineTo(width, height); ctx.closePath(); ctx.fill();
 
-                if (showLogo && brandText) {
-                    ctx.fillStyle = textColor; ctx.font = `900 24px "${titleFont}"`; ctx.fillText('BRAND', 30, 50);
-                    ctx.fillStyle = primaryColor; ctx.font = `bold 16px "${titleFont}"`; ctx.fillText(`| ${brandText}`, 130, 48);
+                if (showLogo && (logoText || brandText)) {
+                    const logoFontSize = 24 * actualBrandScale;
+                    const subFontSize = 16 * actualBrandScale;
+                    const baseX = 30;
+                    const baseY = 50 * Math.max(1, actualBrandScale);
+
+                    ctx.fillStyle = textColor; 
+                    ctx.font = `900 ${logoFontSize}px "${titleFont}"`; 
+                    ctx.fillText(logoText, baseX, baseY);
+
+                    const logoMetrics = ctx.measureText(logoText);
+                    const gap = logoText ? (10 * actualBrandScale) : 0;
+                    const pipeX = baseX + logoMetrics.width + gap;
+
+                    ctx.fillStyle = primaryColor; 
+                    ctx.font = `bold ${subFontSize}px "${titleFont}"`; 
+                    ctx.fillText(`${logoText ? '| ' : ''}${brandText}`, pipeX, baseY - (2 * actualBrandScale));
                 }
+                
                 if (showTitle) {
                     const fontSize = 28 * actualTextScale;
                     const finalTx = 170 + titleOffset.x; const finalTy = height - 40 + titleOffset.y;
@@ -487,7 +502,7 @@ const App = () => {
         }
     };
     renderCanvas();
-  }, [image, iconImage, platform, template, promoText, tagsInput, brandText, isAiDisclosure, removeBg, primaryColor, accentColor, textColor, productScale, textScale, tagScale, tagShape, showLogo, showTitle, showTags, titleFont, tagFont, iconScale, titleOffset, iconOffset, tagOffsets, productOffset]);
+  }, [image, iconImage, platform, template, promoText, tagsInput, brandText, logoText, isAiDisclosure, removeBg, primaryColor, accentColor, textColor, productScale, brandScale, textScale, tagScale, tagShape, showLogo, showTitle, showTags, titleFont, tagFont, iconScale, titleOffset, iconOffset, tagOffsets, productOffset]);
 
   const complianceResult = checkCompliance(promoText + tagsInput);
 
@@ -625,10 +640,15 @@ const App = () => {
                 <div className={!showLogo ? 'opacity-40' : ''}>
                     <div className="flex justify-between items-center mb-2">
                         <label className="flex items-center gap-2 text-xs font-bold text-slate-500 cursor-pointer">
-                            <input type="checkbox" checked={showLogo} onChange={(e)=>setShowLogo(e.target.checked)} className="accent-slate-500 w-4 h-4" /> 品牌徽章內文
+                            <input type="checkbox" checked={showLogo} onChange={(e)=>setShowLogo(e.target.checked)} className="accent-slate-500 w-4 h-4" /> 品牌徽章/LOGO (左上角)
                         </label>
                     </div>
-                    <input type="text" value={brandText} onChange={(e) => setBrandText(e.target.value)} disabled={!showLogo} className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none text-sm font-bold bg-slate-50" />
+                    <div className="flex gap-2">
+                        {template === 'TechBright' && (
+                            <input type="text" value={logoText} onChange={(e) => setLogoText(e.target.value)} disabled={!showLogo} placeholder="LOGO (預設 BRAND)" className="w-1/3 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none text-xs font-bold bg-slate-50" />
+                        )}
+                        <input type="text" value={brandText} onChange={(e) => setBrandText(e.target.value)} disabled={!showLogo} placeholder="徽章內文 (如:官方授權店)" className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none text-xs font-bold bg-slate-50" />
+                    </div>
                 </div>
                 <div className={!showTitle ? 'opacity-40 border-t border-slate-100 pt-4' : 'border-t border-slate-100 pt-4'}>
                     <div className="flex justify-between items-center mb-2">
@@ -712,7 +732,7 @@ const App = () => {
 
                 <hr className="border-slate-100" />
 
-                <div className="space-y-5">
+                <div className="space-y-4">
                     <div className="bg-slate-50 p-4 rounded-lg border border-slate-100">
                         <div className="flex justify-between items-center mb-3">
                             <p className="text-xs font-black text-slate-600 flex items-center gap-1"><Camera className="w-4 h-4"/> 商品主體縮放 ({productScale}%)</p>
@@ -725,13 +745,17 @@ const App = () => {
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-5">
-                        <div className={`bg-slate-50 p-4 rounded-lg border border-slate-100 ${!showTitle && 'opacity-40'}`}>
-                            <p className="text-xs font-black text-slate-600 mb-3 flex items-center gap-1"><TypeIcon className="w-4 h-4"/> 標題大小 ({textScale}%)</p>
+                    <div className="grid grid-cols-3 gap-3">
+                        <div className={`bg-slate-50 p-3 rounded-lg border border-slate-100 flex flex-col justify-center ${!showLogo && 'opacity-40'}`}>
+                            <p className="text-[10px] font-black text-slate-600 mb-2 flex items-center gap-1"><ShieldCheck className="w-3 h-3"/> 徽章 ({brandScale}%)</p>
+                            <input type="range" min="50" max="150" value={brandScale} onChange={(e) => setBrandScale(e.target.value)} disabled={!showLogo} className="w-full accent-slate-400" />
+                        </div>
+                        <div className={`bg-slate-50 p-3 rounded-lg border border-slate-100 flex flex-col justify-center ${!showTitle && 'opacity-40'}`}>
+                            <p className="text-[10px] font-black text-slate-600 mb-2 flex items-center gap-1"><TypeIcon className="w-3 h-3"/> 標題 ({textScale}%)</p>
                             <input type="range" min="50" max="150" value={textScale} onChange={(e) => setTextScale(e.target.value)} disabled={!showTitle} className="w-full accent-slate-400" />
                         </div>
-                        <div className={`bg-slate-50 p-4 rounded-lg border border-slate-100 ${!showTags && 'opacity-40'}`}>
-                            <p className="text-xs font-black text-slate-600 mb-3 flex items-center gap-1"><Box className="w-4 h-4"/> 標籤大小 ({tagScale}%)</p>
+                        <div className={`bg-slate-50 p-3 rounded-lg border border-slate-100 flex flex-col justify-center ${!showTags && 'opacity-40'}`}>
+                            <p className="text-[10px] font-black text-slate-600 mb-2 flex items-center gap-1"><Box className="w-3 h-3"/> 標籤 ({tagScale}%)</p>
                             <input type="range" min="50" max="150" value={tagScale} onChange={(e) => setTagScale(e.target.value)} disabled={!showTags} className="w-full accent-slate-400" />
                         </div>
                     </div>
