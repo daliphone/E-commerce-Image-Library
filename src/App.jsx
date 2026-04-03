@@ -1,13 +1,21 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, AlertTriangle, CheckCircle, Settings, Download, Layout, Type, ShieldCheck, Info, Image as ImageIcon, Sliders, Palette, Maximize, Box, Move, Type as TypeIcon, ImagePlus, RotateCcw, Cloud, Save, DownloadCloud, Loader2, Link2, GripVertical } from 'lucide-react';
+import { Camera, AlertTriangle, CheckCircle, Settings, Download, Layout, Type, ShieldCheck, Info, Image as ImageIcon, Sliders, Palette, Maximize, Box, Move, Type as TypeIcon, ImagePlus, RotateCcw, Cloud, Save, DownloadCloud, Loader2, Link2, GripVertical, Wand2, Key } from 'lucide-react';
 
 const App = () => {
   // 核心狀態
-  const [image, setImage] = useState(null);
+  const [rawImage, setRawImage] = useState(null); // 儲存使用者原始上傳的圖
+  const [image, setImage] = useState(null); // 儲存畫布實際顯示的圖 (可能已去背)
   const [iconImage, setIconImage] = useState(null);
   const [platform, setPlatform] = useState('Shopee');
   const [template, setTemplate] = useState('LightSoft');
-  const [removeBg, setRemoveBg] = useState(true);
+  
+  // 視覺效果狀態
+  const [removeBg, setRemoveBg] = useState(true); // 這是立體陰影開關 (原名延用)
+
+  // --- Remove.bg 真實去背 API 狀態 ---
+  const [enableRemoveBgApi, setEnableRemoveBgApi] = useState(false);
+  const [removeBgApiKey, setRemoveBgApiKey] = useState('');
+  const [isRemovingBg, setIsRemovingBg] = useState(false);
 
   // --- UI 面板拖曳寬度狀態 ---
   const [leftWidth, setLeftWidth] = useState(560); 
@@ -29,7 +37,7 @@ const App = () => {
   const [textColor, setTextColor] = useState('#1e293b'); 
   
   // 文案設定
-  const [logoText, setLogoText] = useState('BRAND'); // 新增：科技版 LOGO 文字
+  const [logoText, setLogoText] = useState('BRAND');
   const [brandText, setBrandText] = useState('官方授權店');
   const [promoText, setPromoText] = useState('GPLUS 智慧手機');
   const [tagsInput, setTagsInput] = useState('公司貨,極窄邊框,資安認證');
@@ -45,7 +53,7 @@ const App = () => {
 
   // 縮放設定
   const [productScale, setProductScale] = useState(100);
-  const [brandScale, setBrandScale] = useState(100); // 新增：徽章大小縮放
+  const [brandScale, setBrandScale] = useState(100);
   const [textScale, setTextScale] = useState(100);
   const [tagScale, setTagScale] = useState(100);   
   const [iconScale, setIconScale] = useState(30);
@@ -78,9 +86,16 @@ const App = () => {
     None: { name: '純淨白圖', desc: '僅商品與純白背景' }
   };
 
+  // 讀取本機設定 (GAS URL & Remove.bg API Key)
   useEffect(() => {
     const savedUrl = localStorage.getItem('ManiFactory_GAS_URL');
     if (savedUrl) setGasUrl(savedUrl);
+    
+    const savedBgKey = localStorage.getItem('ManiFactory_RemoveBg_Key');
+    if (savedBgKey) {
+        setRemoveBgApiKey(savedBgKey);
+        setEnableRemoveBgApi(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -98,36 +113,93 @@ const App = () => {
     return { safe: detected.length === 0, words: detected };
   };
 
-  const handleImageUpload = (e, setter) => {
+  // --- Remove.bg 呼叫邏輯 ---
+  const executeRemoveBg = async (base64Img) => {
+      if (!removeBgApiKey) {
+          alert('SqdtJZEghDkmhdpBYh8W956c');
+          return;
+      }
+      setIsRemovingBg(true);
+      try {
+          // 將 Base64 轉為 Blob 以傳送 FormData
+          const res = await fetch(base64Img);
+          const blob = await res.blob();
+          
+          const formData = new FormData();
+          formData.append('image_file', blob);
+          formData.append('size', 'auto');
+
+          const apiRes = await fetch('https://api.remove.bg/v1.0/removebg', {
+              method: 'POST',
+              headers: { 'X-Api-Key': removeBgApiKey },
+              body: formData
+          });
+
+          if (!apiRes.ok) {
+              const errData = await apiRes.json();
+              throw new Error(errData.errors?.[0]?.title || '去背失敗');
+          }
+
+          const resultBlob = await apiRes.blob();
+          const reader = new FileReader();
+          reader.onloadend = () => {
+              setImage(reader.result); // 將畫布顯示圖換成去背後的圖
+              setIsRemovingBg(false);
+          };
+          reader.readAsDataURL(resultBlob);
+      } catch (err) {
+          alert(`Remove.bg API 錯誤: ${err.message}`);
+          setIsRemovingBg(false);
+          setImage(base64Img); // 失敗則使用原圖
+      }
+  };
+
+  const handleApiKeyChange = (e) => {
+      const val = e.target.value;
+      setRemoveBgApiKey(val);
+      localStorage.setItem('ManiFactory_RemoveBg_Key', val);
+  };
+
+  // --- 圖片上傳處理 ---
+  const processUpload = (file) => {
+      if (file && file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (f) => {
+            const result = f.target.result;
+            setRawImage(result);
+            setImage(result); // 先顯示原圖
+            
+            // 如果 API 開關開啟且有 Key，自動執行去背
+            if (enableRemoveBgApi && removeBgApiKey) {
+                executeRemoveBg(result);
+            }
+        };
+        reader.readAsDataURL(file);
+      }
+  };
+
+  const handleImageUpload = (e) => {
+    processUpload(e.target.files[0]);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragActive(false);
+    processUpload(e.dataTransfer.files[0]);
+  };
+
+  const handleDragOver = (e) => { e.preventDefault(); setIsDragActive(true); };
+  const handleDragLeave = (e) => { e.preventDefault(); setIsDragActive(false); };
+  
+  // 處理外部圖示上傳
+  const handleIconUpload = (e) => {
     const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (f) => setter(f.target.result);
-      reader.readAsDataURL(file);
-    }
-  };
-
-  // --- 拖放 (Drag & Drop) 事件處理 ---
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    setIsDragActive(true);
-  };
-
-  const handleDragLeave = (e) => {
-    e.preventDefault();
-    setIsDragActive(false);
-  };
-
-  const handleDrop = (e, setter) => {
-    e.preventDefault();
-    setIsDragActive(false);
-    const file = e.dataTransfer.files[0];
     if (file && file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = (f) => setter(f.target.result);
-      reader.readAsDataURL(file);
+        const reader = new FileReader();
+        reader.onload = (f) => setIconImage(f.target.result);
+        reader.readAsDataURL(file);
     }
-  };
+  }
 
   const roundRect = (ctx, x, y, width, height, radius, stroke = false) => {
     ctx.beginPath();
@@ -151,6 +223,7 @@ const App = () => {
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
   };
 
+  // --- GAS 雲端存取邏輯 ---
   const saveToGAS = async () => {
     if (!gasUrl) { setCloudMessage({ text: '請先輸入 GAS 網址！', type: 'error' }); return; }
     if (!projectName.trim()) { setCloudMessage({ text: '請輸入樣板名稱！', type: 'error' }); return; }
@@ -164,7 +237,7 @@ const App = () => {
       logoText, brandText, promoText, tagsInput, isAiDisclosure, tagShape, showLogo, showTitle, showTags,
       titleFont, tagFont, productScale, brandScale, textScale, tagScale, iconScale, 
       productOffset, titleOffset, iconOffset, tagOffsets,
-      imageBase64: image, 
+      imageBase64: image, // 儲存去背後(或顯示中)的圖
       iconImageBase64: iconImage
     };
 
@@ -221,13 +294,17 @@ const App = () => {
     setIconOffset(params.iconOffset); setTagOffsets(params.tagOffsets);
     setProductOffset(params.productOffset || { x: 0, y: params.productOffsetY || 0 });
 
-    if (params.savedMainImageUrl) setImage(params.savedMainImageUrl);
+    if (params.savedMainImageUrl) {
+        setImage(params.savedMainImageUrl);
+        setRawImage(params.savedMainImageUrl); // 同步給 rawImage
+    }
     if (params.savedIconImageUrl) setIconImage(params.savedIconImageUrl);
 
     setShowLoadMenu(false);
     setCloudMessage({ text: '已成功套用樣板！', type: 'success' });
     setTimeout(() => setCloudMessage({ text: '', type: '' }), 3000);
   };
+
 
   const getMousePos = (e) => {
     const canvas = canvasRef.current;
@@ -361,6 +438,7 @@ const App = () => {
 
         if (mImg) hitBoxes.current.product = { x, y, w, h };
 
+        // 使用保留的 removeBg 作為純光影開關
         if (removeBg && mImg) { ctx.shadowColor = 'rgba(0,0,0,0.08)'; ctx.shadowBlur = 30; ctx.shadowOffsetY = 15; }
         
         if (mImg) {
@@ -376,7 +454,7 @@ const App = () => {
             const tags = tagsInput.split(',').map(t => t.trim()).filter(t => t);
             const actualTextScale = textScale / 100;
             const actualTagScale = tagScale / 100;
-            const actualBrandScale = brandScale / 100; // 徽章縮放比例
+            const actualBrandScale = brandScale / 100;
 
             if (currentTemplate === 'LightSoft' || currentTemplate === 'LightClean') {
                 if (showLogo && brandText) {
@@ -517,7 +595,7 @@ const App = () => {
         <div style={{ background: activeTheme.gradient }} className="p-5 border-b text-white shrink-0 transition-colors duration-500">
           <h1 className="text-xl font-bold flex items-center gap-2 drop-shadow-sm">
             <ImageIcon className="w-6 h-6 text-white" />
-            馬尼製圖工廠 <span className="text-[10px] bg-white text-slate-900 px-2 py-0.5 rounded-full ml-1 font-black shadow-sm">全能拖曳版</span>
+            馬尼製圖工廠 <span className="text-[10px] bg-white text-slate-900 px-2 py-0.5 rounded-full ml-1 font-black shadow-sm">AI 去背整合版</span>
           </h1>
         </div>
 
@@ -576,19 +654,62 @@ const App = () => {
             </div>
           </section>
 
-          {/* 圖片上傳區 (支援 Drag & Drop) */}
-          <section>
-            <label className="block text-sm font-bold mb-2 flex items-center gap-2 text-slate-700">
-              <Camera className="w-4 h-4" style={{ color: activeTheme.main }} /> 1. 原廠商品圖 (支援拖放上傳)
-            </label>
+          {/* 圖片上傳區 (支援 Drag & Drop 與 Remove.bg API) */}
+          <section className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+            <div className="flex justify-between items-center mb-3">
+                <label className="text-sm font-bold flex items-center gap-2 text-slate-700">
+                    <Camera className="w-4 h-4" style={{ color: activeTheme.main }} /> 1. 原廠商品圖
+                </label>
+                <div className="flex items-center gap-2 bg-purple-50 px-2 py-1 rounded border border-purple-100">
+                    <Wand2 className="w-3 h-3 text-purple-500" />
+                    <label className="flex items-center gap-1.5 text-xs font-bold text-purple-700 cursor-pointer">
+                        <input type="checkbox" checked={enableRemoveBgApi} onChange={(e)=>setEnableRemoveBgApi(e.target.checked)} className="accent-purple-500" />
+                        啟用真實 AI 去背 (Remove.bg)
+                    </label>
+                </div>
+            </div>
+
+            {/* Remove.bg API Key 設定區塊 */}
+            {enableRemoveBgApi && (
+                <div className="mb-4 bg-purple-100/50 p-3 rounded-lg border border-purple-200">
+                    <div className="flex items-center gap-2">
+                        <Key className="w-4 h-4 text-purple-600" />
+                        <input 
+                            type="password" 
+                            placeholder="請輸入您的 Remove.bg API Key" 
+                            value={removeBgApiKey}
+                            onChange={handleApiKeyChange}
+                            className="w-full text-xs px-2 py-1.5 border border-purple-200 rounded focus:outline-none focus:border-purple-400 bg-white" 
+                        />
+                    </div>
+                    <p className="text-[10px] text-purple-500 mt-1.5 ml-6">設定後將自動記憶。開啟此功能時，上傳新圖會自動呼叫 API 去背。</p>
+                    
+                    {/* 若已有圖片但尚未去背，顯示手動按鈕 */}
+                    {rawImage && !isRemovingBg && (
+                         <button 
+                             onClick={() => executeRemoveBg(rawImage)} 
+                             className="mt-2 w-full bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold py-1.5 rounded transition-colors"
+                         >
+                             ✨ 立即為目前圖片去背
+                         </button>
+                    )}
+                </div>
+            )}
+
             <div 
-              className={`border-2 border-dashed rounded-xl p-5 text-center transition-all relative group cursor-pointer ${isDragActive ? 'border-sky-500 bg-sky-50 shadow-inner' : 'border-slate-200'}`} 
-              style={!isDragActive ? { backgroundColor: activeTheme.bg, borderColor: activeTheme.border } : {}}
+              className={`border-2 border-dashed rounded-xl p-5 text-center transition-all relative group cursor-pointer overflow-hidden ${isDragActive ? 'border-sky-500 bg-sky-50 shadow-inner' : 'border-slate-200 bg-white'}`} 
+              style={!isDragActive ? { borderColor: activeTheme.border } : {}}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDrop(e, setImage)}
+              onDrop={handleDrop}
             >
-              <input type="file" onChange={(e)=>handleImageUpload(e, setImage)} className="hidden" id="img-upload" accept="image/*" />
+              {isRemovingBg && (
+                  <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center">
+                      <Loader2 className="w-6 h-6 text-purple-600 animate-spin mb-2" />
+                      <p className="text-xs font-bold text-purple-800">🚀 正在呼叫 AI 高精度去背...</p>
+                  </div>
+              )}
+              <input type="file" onChange={handleImageUpload} className="hidden" id="img-upload" accept="image/*" />
               <label htmlFor="img-upload" className="cursor-pointer block pointer-events-none">
                 <div className="bg-white shadow-sm border border-slate-100 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
                   <Camera className="w-5 h-5" style={{ color: activeTheme.main }} />
@@ -598,6 +719,11 @@ const App = () => {
                 </span>
                 <p className="text-[10px] text-slate-400 mt-1">載入後可於右側畫布自由拖曳商品位置</p>
               </label>
+            </div>
+
+            <div className="mt-3 flex items-center gap-2 pl-1 bg-white p-2 rounded-lg border border-slate-200">
+                <input type="checkbox" checked={removeBg} onChange={(e) => setRemoveBg(e.target.checked)} id="remove-bg" className="accent-slate-500 rounded w-4 h-4 cursor-pointer" />
+                <label htmlFor="remove-bg" className="text-xs text-slate-700 font-bold cursor-pointer">加上立體光影與陰影 (建議去背後開啟)</label>
             </div>
           </section>
 
@@ -688,7 +814,7 @@ const App = () => {
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
                 <div className="flex items-center gap-3">
                     <label className="cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-bold py-2.5 px-4 rounded-lg transition-colors border border-slate-200">
-                        <input type="file" onChange={(e)=>handleImageUpload(e, setIconImage)} className="hidden" accept="image/*" />
+                        <input type="file" onChange={handleIconUpload} className="hidden" accept="image/*" />
                         選擇圖示 (透明PNG)
                     </label>
                     {iconImage ? <span className="text-sm text-emerald-500 font-bold flex items-center gap-1"><CheckCircle className="w-4 h-4"/> 已載入 (可拖曳)</span> : null}
@@ -739,10 +865,6 @@ const App = () => {
                             <span className="text-[10px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded">支援畫布拖曳</span>
                         </div>
                         <input type="range" min="50" max="150" value={productScale} onChange={(e) => setProductScale(e.target.value)} className="w-full accent-slate-400" />
-                        <div className="mt-3 flex justify-between items-center">
-                             <p className="text-[10px] font-bold text-slate-500">垂直位移微調</p>
-                             <input type="range" min="-300" max="300" value={productOffset.y} onChange={(e) => setProductOffset({...productOffset, y: parseInt(e.target.value)})} className="w-1/2 accent-slate-400" />
-                        </div>
                     </div>
 
                     <div className="grid grid-cols-3 gap-3">
