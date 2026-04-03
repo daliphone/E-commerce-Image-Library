@@ -1,30 +1,27 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, AlertTriangle, CheckCircle, Settings, Download, Layout, Type, ShieldCheck, Info, Image as ImageIcon, Sliders, Palette, Maximize, Box, Move, Type as TypeIcon, ImagePlus, RotateCcw, Cloud, Save, DownloadCloud, Loader2, Link2, GripVertical, Wand2, Key } from 'lucide-react';
+import { Camera, AlertTriangle, CheckCircle, Settings, Download, Layout, Type, ShieldCheck, Info, Image as ImageIcon, Sliders, Palette, Maximize, Box, Move, Type as TypeIcon, ImagePlus, RotateCcw, Cloud, Save, DownloadCloud, Loader2, Link2, GripVertical, Wand2, Key, Layers } from 'lucide-react';
 
 const App = () => {
   // 核心狀態
-  const [rawImage, setRawImage] = useState(null); // 儲存使用者原始上傳的圖
-  const [image, setImage] = useState(null); // 儲存畫布實際顯示的圖 (可能已去背)
+  const [rawImage, setRawImage] = useState(null); 
+  const [image, setImage] = useState(null); 
   const [iconImage, setIconImage] = useState(null);
   const [platform, setPlatform] = useState('Shopee');
   const [template, setTemplate] = useState('LightSoft');
   
   // 視覺效果狀態
-  const [removeBg, setRemoveBg] = useState(true); // 這是立體陰影開關 (原名延用)
+  const [removeBg, setRemoveBg] = useState(true); 
 
-  // --- Remove.bg 真實去背 API 狀態 ---
+  // --- Remove.bg API ---
   const [enableRemoveBgApi, setEnableRemoveBgApi] = useState(false);
   const [removeBgApiKey, setRemoveBgApiKey] = useState('');
   const [isRemovingBg, setIsRemovingBg] = useState(false);
-  const [bgRemovalCount, setBgRemovalCount] = useState(0); // 新增：每月去背次數統計
+  const [bgRemovalCount, setBgRemovalCount] = useState(0); 
 
   // --- UI 面板拖曳寬度狀態 ---
   const [leftWidth, setLeftWidth] = useState(560); 
-
-  // --- 拖放上傳 (Drag & Drop) 狀態 ---
   const [isDragActive, setIsDragActive] = useState(false);
 
-  // 平台主題配色
   const THEMES = {
     Shopee: { name: '蝦皮購物', main: '#f97316', gradient: 'linear-gradient(135deg, #fb923c, #ef4444)', bg: '#fff7ed', border: '#fdba74', text: '#ea580c', allowText: true },
     Momo: { name: 'Momo 購物', main: '#ec4899', gradient: 'linear-gradient(135deg, #f472b6, #e11d48)', bg: '#fdf2f8', border: '#f9a8d4', text: '#be185d', allowText: false },
@@ -32,19 +29,16 @@ const App = () => {
   };
   const activeTheme = THEMES[platform];
 
-  // 畫布自訂顏色
   const [primaryColor, setPrimaryColor] = useState('#f97316'); 
   const [accentColor, setAccentColor] = useState('#ef4444'); 
   const [textColor, setTextColor] = useState('#1e293b'); 
   
-  // 文案設定
   const [logoText, setLogoText] = useState('BRAND');
   const [brandText, setBrandText] = useState('官方授權店');
   const [promoText, setPromoText] = useState('GPLUS 智慧手機');
   const [tagsInput, setTagsInput] = useState('公司貨,極窄邊框,資安認證');
   const [isAiDisclosure, setIsAiDisclosure] = useState(false);
 
-  // 樣式與開關
   const [tagShape, setTagShape] = useState('pill');
   const [showLogo, setShowLogo] = useState(true);
   const [showTitle, setShowTitle] = useState(true);
@@ -52,20 +46,25 @@ const App = () => {
   const [titleFont, setTitleFont] = useState('Microsoft JhengHei');
   const [tagFont, setTagFont] = useState('Microsoft JhengHei');
 
-  // 縮放設定
   const [productScale, setProductScale] = useState(100);
   const [brandScale, setBrandScale] = useState(100);
   const [textScale, setTextScale] = useState(100);
   const [tagScale, setTagScale] = useState(100);   
   const [iconScale, setIconScale] = useState(30);
 
-  // --- 互動拖曳相關狀態 (獨立位移) ---
+  // --- 圖層化架構升級 (Layer System v1.0) ---
   const [productOffset, setProductOffset] = useState({ x: 0, y: 0 });
   const [titleOffset, setTitleOffset] = useState({ x: 0, y: 0 });
   const [iconOffset, setIconOffset] = useState({ x: 150, y: -150 });
   const [tagOffsets, setTagOffsets] = useState([]);
   
-  // --- 雲端儲存 (GAS) 相關狀態 ---
+  // 新增：背景裝飾圖層獨立 Offset (讓模板的裝飾物也能自由移動)
+  const [decoOffsets, setDecoOffsets] = useState({
+      frame: { x: 0, y: 0 }, // 用於 LightSoft 邊框
+      bars: { x: 0, y: 0 },  // 用於 LightClean 底部色條
+      poly: { x: 0, y: 0 }   // 用於 TechBright 科技切角
+  });
+  
   const [gasUrl, setGasUrl] = useState('https://script.google.com/macros/s/AKfycbz56mtEvhynoY7CqJ7PKU0t5DMZDRWFta9fUQdrPAuxlGqCQ_hg5Fhe11JlSF9vORAJeQ/exec');
   const [projectName, setProjectName] = useState('雙11促銷樣板');
   const [isSaving, setIsSaving] = useState(false);
@@ -75,7 +74,9 @@ const App = () => {
   const [cloudMessage, setCloudMessage] = useState({ text: '', type: '' });
 
   const canvasRef = useRef(null);
-  const hitBoxes = useRef({ product: null, title: null, icon: null, tags: [] });
+  
+  // 新增 deco (裝飾圖層) 的碰撞紀錄
+  const hitBoxes = useRef({ product: null, title: null, icon: null, tags: [], deco: null });
   const dragInfo = useRef({ isDragging: false, target: null, startX: 0, startY: 0, initialOffset: {x:0, y:0} });
 
   const BANNED_WORDS = ['第一', '最強', '最優', '療效', '根治', '殺頭價', '保證見效'];
@@ -87,7 +88,6 @@ const App = () => {
     None: { name: '純淨白圖', desc: '僅商品與純白背景' }
   };
 
-  // 讀取本機設定 (GAS URL & Remove.bg API Key & 每月去背次數)
   useEffect(() => {
     const savedUrl = localStorage.getItem('ManiFactory_GAS_URL');
     if (savedUrl) setGasUrl(savedUrl);
@@ -98,18 +98,15 @@ const App = () => {
         setEnableRemoveBgApi(true);
     }
 
-    // --- 檢查與初始化每月去背次數 ---
-    const currentMonth = new Date().toISOString().slice(0, 7); // 格式 "YYYY-MM"
+    const currentMonth = new Date().toISOString().slice(0, 7); 
     const savedMonth = localStorage.getItem('ManiFactory_RemoveBg_Month');
     const savedCount = parseInt(localStorage.getItem('ManiFactory_RemoveBg_Count') || '0', 10);
 
     if (savedMonth !== currentMonth) {
-        // 新的一個月，將次數歸零
         localStorage.setItem('ManiFactory_RemoveBg_Month', currentMonth);
         localStorage.setItem('ManiFactory_RemoveBg_Count', '0');
         setBgRemovalCount(0);
     } else {
-        // 同一個月，載入歷史次數
         setBgRemovalCount(savedCount);
     }
   }, []);
@@ -129,78 +126,48 @@ const App = () => {
     return { safe: detected.length === 0, words: detected };
   };
 
-  // --- Remove.bg 呼叫邏輯 ---
   const executeRemoveBg = async (base64Img) => {
-      if (!removeBgApiKey) {
-          alert('請先輸入 Remove.bg API Key！');
-          return;
-      }
+      if (!removeBgApiKey) { alert('請先輸入 Remove.bg API Key！'); return; }
       setIsRemovingBg(true);
       try {
-          // 將 Base64 轉為 Blob 以傳送 FormData
           const res = await fetch(base64Img);
           const blob = await res.blob();
-          
           const formData = new FormData();
           formData.append('image_file', blob);
           formData.append('size', 'auto');
 
-          const apiRes = await fetch('https://api.remove.bg/v1.0/removebg', {
-              method: 'POST',
-              headers: { 'X-Api-Key': removeBgApiKey },
-              body: formData
-          });
+          const apiRes = await fetch('https://api.remove.bg/v1.0/removebg', { method: 'POST', headers: { 'X-Api-Key': removeBgApiKey }, body: formData });
+          if (!apiRes.ok) throw new Error((await apiRes.json()).errors?.[0]?.title || '去背失敗');
 
-          if (!apiRes.ok) {
-              const errData = await apiRes.json();
-              throw new Error(errData.errors?.[0]?.title || '去背失敗');
-          }
-
-          const resultBlob = await apiRes.blob();
           const reader = new FileReader();
           reader.onloadend = () => {
-              setImage(reader.result); // 將畫布顯示圖換成去背後的圖
+              setImage(reader.result); 
               setIsRemovingBg(false);
-              
-              // 去背成功，次數 +1 並儲存至 localStorage
               setBgRemovalCount(prevCount => {
                   const newCount = prevCount + 1;
                   localStorage.setItem('ManiFactory_RemoveBg_Count', newCount.toString());
                   return newCount;
               });
           };
-          reader.readAsDataURL(resultBlob);
+          reader.readAsDataURL(await apiRes.blob());
       } catch (err) {
           alert(`Remove.bg API 錯誤: ${err.message}`);
-          setIsRemovingBg(false);
-          setImage(base64Img); // 失敗則使用原圖
+          setIsRemovingBg(false); setImage(base64Img); 
       }
   };
 
-  const handleApiKeyChange = (e) => {
-      const val = e.target.value;
-      setRemoveBgApiKey(val);
-      localStorage.setItem('ManiFactory_RemoveBg_Key', val);
-  };
-
-  // --- 圖片上傳處理 ---
   const processUpload = (file) => {
       if (file && file.type.startsWith('image/')) {
         const reader = new FileReader();
         reader.onload = (f) => {
-            const result = f.target.result;
-            setRawImage(result);
-            setImage(result); // 先顯示原圖
-            
-            // 如果 API 開關開啟且有 Key，自動執行去背
-            if (enableRemoveBgApi && removeBgApiKey) {
-                executeRemoveBg(result);
-            }
+            setRawImage(f.target.result); setImage(f.target.result); 
+            if (enableRemoveBgApi && removeBgApiKey) executeRemoveBg(f.target.result);
         };
         reader.readAsDataURL(file);
       }
   };
 
+  // --- 修復：補回拖拉上傳與圖片選擇事件函式 ---
   const handleImageUpload = (e) => {
     processUpload(e.target.files[0]);
   };
@@ -211,10 +178,16 @@ const App = () => {
     processUpload(e.dataTransfer.files[0]);
   };
 
-  const handleDragOver = (e) => { e.preventDefault(); setIsDragActive(true); };
-  const handleDragLeave = (e) => { e.preventDefault(); setIsDragActive(false); };
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragActive(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setIsDragActive(false);
+  };
   
-  // 處理外部圖示上傳
   const handleIconUpload = (e) => {
     const file = e.target.files[0];
     if (file && file.type.startsWith('image/')) {
@@ -222,88 +195,57 @@ const App = () => {
         reader.onload = (f) => setIconImage(f.target.result);
         reader.readAsDataURL(file);
     }
-  }
+  };
 
   const roundRect = (ctx, x, y, width, height, radius, stroke = false) => {
-    ctx.beginPath();
-    ctx.moveTo(x + radius, y);
-    ctx.lineTo(x + width - radius, y);
-    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-    ctx.lineTo(x + width, y + height - radius);
-    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-    ctx.lineTo(x + radius, y + height);
-    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-    ctx.lineTo(x, y + radius);
-    ctx.quadraticCurveTo(x, y, x + radius, y);
-    ctx.closePath();
+    ctx.beginPath(); ctx.moveTo(x + radius, y); ctx.lineTo(x + width - radius, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + radius); ctx.lineTo(x + width, y + height - radius);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height); ctx.lineTo(x + radius, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - radius); ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y); ctx.closePath();
     stroke ? ctx.stroke() : ctx.fill();
   };
 
   const hexToRgba = (hex, alpha) => {
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
+    const r = parseInt(hex.slice(1, 3), 16); const g = parseInt(hex.slice(3, 5), 16); const b = parseInt(hex.slice(5, 7), 16);
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
   };
 
-  // --- GAS 雲端存取邏輯 ---
   const saveToGAS = async () => {
     if (!gasUrl) { setCloudMessage({ text: '請先輸入 GAS 網址！', type: 'error' }); return; }
     if (!projectName.trim()) { setCloudMessage({ text: '請輸入樣板名稱！', type: 'error' }); return; }
-
     localStorage.setItem('ManiFactory_GAS_URL', gasUrl);
-    setIsSaving(true);
-    setCloudMessage({ text: '正在上傳參數與圖片至 Google Drive...', type: 'info' });
+    setIsSaving(true); setCloudMessage({ text: '正在上傳參數與圖片至 Google Drive...', type: 'info' });
 
     const payload = {
       projectName, platform, template, removeBg, primaryColor, accentColor, textColor,
       logoText, brandText, promoText, tagsInput, isAiDisclosure, tagShape, showLogo, showTitle, showTags,
       titleFont, tagFont, productScale, brandScale, textScale, tagScale, iconScale, 
-      productOffset, titleOffset, iconOffset, tagOffsets,
-      imageBase64: image, // 儲存去背後(或顯示中)的圖
-      iconImageBase64: iconImage
+      productOffset, titleOffset, iconOffset, tagOffsets, decoOffsets, // 加入圖層狀態
+      imageBase64: image, iconImageBase64: iconImage
     };
 
     try {
-      const response = await fetch(gasUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: 'save', payload: payload })
-      });
+      const response = await fetch(gasUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'save', payload: payload }) });
       const result = await response.json();
       if (result.status === 'success') {
         setCloudMessage({ text: `儲存成功！(${result.data.projectName})`, type: 'success' });
         setTimeout(() => setCloudMessage({ text: '', type: '' }), 3000);
-      } else {
-        setCloudMessage({ text: '儲存失敗: ' + result.message, type: 'error' });
-      }
-    } catch (err) {
-      setCloudMessage({ text: '連線失敗，請檢查網址或網路狀態。', type: 'error' });
-    } finally {
-      setIsSaving(false);
-    }
+      } else setCloudMessage({ text: '儲存失敗: ' + result.message, type: 'error' });
+    } catch (err) { setCloudMessage({ text: '連線失敗，請檢查網址或網路狀態。', type: 'error' }); } 
+    finally { setIsSaving(false); }
   };
 
   const loadFromGAS = async () => {
     if (!gasUrl) { setCloudMessage({ text: '請先輸入 GAS 網址！', type: 'error' }); return; }
     setIsLoadingList(true); setShowLoadMenu(true);
     try {
-      const response = await fetch(gasUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: 'load' })
-      });
+      const response = await fetch(gasUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'load' }) });
       const result = await response.json();
-      if (result.status === 'success') {
-        setCloudTemplates(result.data.templates);
-      } else {
-        setCloudMessage({ text: '讀取失敗: ' + result.message, type: 'error' });
-      }
-    } catch (err) {
-      setCloudMessage({ text: '無法讀取樣板列表。', type: 'error' });
-    } finally {
-      setIsLoadingList(false);
-    }
+      if (result.status === 'success') setCloudTemplates(result.data.templates);
+      else setCloudMessage({ text: '讀取失敗: ' + result.message, type: 'error' });
+    } catch (err) { setCloudMessage({ text: '無法讀取樣板列表。', type: 'error' }); } 
+    finally { setIsLoadingList(false); }
   };
 
   const applyTemplate = async (params) => {
@@ -316,18 +258,16 @@ const App = () => {
     setTagScale(params.tagScale); setIconScale(params.iconScale); setTitleOffset(params.titleOffset);
     setIconOffset(params.iconOffset); setTagOffsets(params.tagOffsets);
     setProductOffset(params.productOffset || { x: 0, y: params.productOffsetY || 0 });
+    
+    // 相容並還原背景圖層位移
+    setDecoOffsets(params.decoOffsets || { frame: { x: 0, y: 0 }, bars: { x: 0, y: 0 }, poly: { x: 0, y: 0 } });
 
-    if (params.savedMainImageUrl) {
-        setImage(params.savedMainImageUrl);
-        setRawImage(params.savedMainImageUrl); // 同步給 rawImage
-    }
+    if (params.savedMainImageUrl) { setImage(params.savedMainImageUrl); setRawImage(params.savedMainImageUrl); }
     if (params.savedIconImageUrl) setIconImage(params.savedIconImageUrl);
 
-    setShowLoadMenu(false);
-    setCloudMessage({ text: '已成功套用樣板！', type: 'success' });
+    setShowLoadMenu(false); setCloudMessage({ text: '已成功套用樣板！', type: 'success' });
     setTimeout(() => setCloudMessage({ text: '', type: '' }), 3000);
   };
-
 
   const getMousePos = (e) => {
     const canvas = canvasRef.current;
@@ -337,6 +277,7 @@ const App = () => {
     return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
   };
 
+  // --- 圖層拖曳碰撞邏輯升級 ---
   const handleMouseDown = (e) => {
     if (!activeTheme.allowText && platform === 'Momo') {
         const { x, y } = getMousePos(e);
@@ -350,6 +291,7 @@ const App = () => {
     const { x, y } = getMousePos(e);
     const boxes = hitBoxes.current;
 
+    // Z-Index 優先級：圖示 > 標籤 > 標題 > 商品圖 >背景裝飾層
     if (iconImage && boxes.icon && x >= boxes.icon.x && x <= boxes.icon.x + boxes.icon.w && y >= boxes.icon.y && y <= boxes.icon.y + boxes.icon.h) {
         dragInfo.current = { isDragging: true, target: { type: 'icon' }, startX: x, startY: y, initialOffset: iconOffset }; return;
     }
@@ -365,6 +307,12 @@ const App = () => {
     if (image && boxes.product && x >= boxes.product.x && x <= boxes.product.x + boxes.product.w && y >= boxes.product.y && y <= boxes.product.y + boxes.product.h) {
         dragInfo.current = { isDragging: true, target: { type: 'product' }, startX: x, startY: y, initialOffset: productOffset }; return;
     }
+    
+    // 背景裝飾層碰撞判定 (最後判定，確保不會遮擋主體)
+    if (boxes.deco && x >= boxes.deco.x && x <= boxes.deco.x + boxes.deco.w && y >= boxes.deco.y && y <= boxes.deco.y + boxes.deco.h) {
+        const key = boxes.deco.key;
+        dragInfo.current = { isDragging: true, target: { type: 'deco', key: key }, startX: x, startY: y, initialOffset: decoOffsets[key] || {x:0, y:0} }; return;
+    }
   };
 
   const handleMouseMove = (e) => {
@@ -374,12 +322,16 @@ const App = () => {
         const dx = x - dragInfo.current.startX;
         const dy = y - dragInfo.current.startY;
         const { target, initialOffset } = dragInfo.current;
+        
         if (target.type === 'title') setTitleOffset({ x: initialOffset.x + dx, y: initialOffset.y + dy });
         else if (target.type === 'icon') setIconOffset({ x: initialOffset.x + dx, y: initialOffset.y + dy });
         else if (target.type === 'tag') {
             setTagOffsets(prev => { const next = [...prev]; next[target.index] = { x: initialOffset.x + dx, y: initialOffset.y + dy }; return next; });
         }
         else if (target.type === 'product') setProductOffset({ x: initialOffset.x + dx, y: initialOffset.y + dy });
+        else if (target.type === 'deco') {
+            setDecoOffsets(prev => ({ ...prev, [target.key]: { x: initialOffset.x + dx, y: initialOffset.y + dy } }));
+        }
         
         canvasRef.current.style.cursor = 'grabbing'; return;
     }
@@ -396,16 +348,18 @@ const App = () => {
         }
     }
     if (!isHovering && image && boxes.product && x >= boxes.product.x && x <= boxes.product.x + boxes.product.w && y >= boxes.product.y && y <= boxes.product.y + boxes.product.h) isHovering = true;
+    
+    // Hover 判定裝飾圖層
+    if (!isHovering && boxes.deco && x >= boxes.deco.x && x <= boxes.deco.x + boxes.deco.w && y >= boxes.deco.y && y <= boxes.deco.y + boxes.deco.h) isHovering = true;
 
     canvasRef.current.style.cursor = isHovering ? 'grab' : 'default';
   };
 
   const handleMouseUpOrLeave = () => { dragInfo.current.isDragging = false; dragInfo.current.target = null; if (canvasRef.current) canvasRef.current.style.cursor = 'default'; };
   const resetPositions = () => { 
-      setTitleOffset({x: 0, y: 0}); 
-      setIconOffset({x: 150, y: -150}); 
-      setTagOffsets(tagOffsets.map(() => ({x: 0, y: 0}))); 
-      setProductOffset({x: 0, y: 0}); 
+      setTitleOffset({x: 0, y: 0}); setIconOffset({x: 150, y: -150}); 
+      setTagOffsets(tagOffsets.map(() => ({x: 0, y: 0}))); setProductOffset({x: 0, y: 0}); 
+      setDecoOffsets({ frame: {x:0, y:0}, bars: {x:0, y:0}, poly: {x:0, y:0} }); // 重置圖層位置
   };
 
   // --- 畫布繪製 ---
@@ -416,13 +370,11 @@ const App = () => {
     const width = canvas.width;
     const height = canvas.height;
     
-    hitBoxes.current = { product: null, title: null, icon: null, tags: [] };
+    hitBoxes.current = { product: null, title: null, icon: null, tags: [], deco: null };
 
     const loadImg = (src) => new Promise((resolve) => {
-        const img = new Image();
-        img.crossOrigin = "Anonymous"; 
-        img.onload = () => resolve(img);
-        img.onerror = () => resolve(null); 
+        const img = new Image(); img.crossOrigin = "Anonymous"; 
+        img.onload = () => resolve(img); img.onerror = () => resolve(null); 
         img.src = src;
     });
 
@@ -437,17 +389,30 @@ const App = () => {
         const isMomo = !THEMES[platform].allowText;
         const currentTemplate = isMomo ? 'None' : template;
 
+        // 1. 繪製圖層化背景裝飾
         if (currentTemplate === 'LightSoft') {
             const grad = ctx.createRadialGradient(width/2, height/2, 100, width/2, height/2, width);
             grad.addColorStop(0, '#FFFFFF'); grad.addColorStop(1, hexToRgba(primaryColor, 0.08)); 
             ctx.fillStyle = grad; ctx.fillRect(0, 0, width, height);
-            ctx.strokeStyle = hexToRgba(primaryColor, 0.2); ctx.lineWidth = 15; ctx.strokeRect(15, 15, width - 30, height - 30);
+            
+            // 獨立的邊框圖層
+            const fOff = decoOffsets.frame;
+            const fx = 15 + fOff.x; const fy = 15 + fOff.y;
+            const fw = width - 30; const fh = height - 30;
+            ctx.strokeStyle = hexToRgba(primaryColor, 0.2); ctx.lineWidth = 15; ctx.strokeRect(fx, fy, fw, fh);
+            hitBoxes.current.deco = { key: 'frame', x: fx, y: fy, w: fw, h: fh };
+            
         } else if (currentTemplate === 'LightClean') {
-             const grad = ctx.createLinearGradient(0, height - 150, 0, height);
+             const bOff = decoOffsets.bars;
+             const bx = bOff.x; const by = height - 150 + bOff.y;
+             
+             const grad = ctx.createLinearGradient(0, by, 0, by + 150);
              grad.addColorStop(0, '#FFFFFF'); grad.addColorStop(1, hexToRgba(primaryColor, 0.15));
-             ctx.fillStyle = grad; ctx.fillRect(0, height - 150, width, 150);
+             ctx.fillStyle = grad; ctx.fillRect(bx, by, width, 150);
+             hitBoxes.current.deco = { key: 'bars', x: bx, y: by, w: width, h: 150 };
         }
 
+        // 2. 商品主體層
         let baseScale = 0.75;
         let baseYOffset = showTitle ? 20 : 0;
         if (currentTemplate === 'TechBright') { baseScale = 0.65; baseYOffset = showTitle ? -20 : 0; }
@@ -461,7 +426,6 @@ const App = () => {
 
         if (mImg) hitBoxes.current.product = { x, y, w, h };
 
-        // 使用保留的 removeBg 作為純光影開關
         if (removeBg && mImg) { ctx.shadowColor = 'rgba(0,0,0,0.08)'; ctx.shadowBlur = 30; ctx.shadowOffsetY = 15; }
         
         if (mImg) {
@@ -473,6 +437,7 @@ const App = () => {
             ctx.fillText('請上傳商品圖', x + w/2, y + h/2); ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
         }
 
+        // 3. 裝飾與文字層
         if (!isMomo) {
             const tags = tagsInput.split(',').map(t => t.trim()).filter(t => t);
             const actualTextScale = textScale / 100;
@@ -489,13 +454,9 @@ const App = () => {
                     const radius = 15 * actualBrandScale;
                     const badgeY = -10;
 
-                    ctx.fillStyle = primaryColor; 
-                    roundRect(ctx, width/2 - textW/2, badgeY, textW, badgeH, radius);
-                    ctx.fillStyle = '#FFFFFF'; 
-                    ctx.textAlign = 'center'; 
-                    ctx.textBaseline = 'middle'; 
-                    ctx.fillText(brandText, width/2, badgeY + badgeH/2 + (2 * actualBrandScale));
-                    ctx.textBaseline = 'alphabetic';
+                    ctx.fillStyle = primaryColor; roundRect(ctx, width/2 - textW/2, badgeY, textW, badgeH, radius);
+                    ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; 
+                    ctx.fillText(brandText, width/2, badgeY + badgeH/2 + (2 * actualBrandScale)); ctx.textBaseline = 'alphabetic';
                 }
                 if (showTitle) {
                     const fontSize = 36 * actualTextScale;
@@ -510,8 +471,11 @@ const App = () => {
                 }
 
                 if (currentTemplate === 'LightClean') {
-                    ctx.fillStyle = accentColor; ctx.fillRect(0, height - 30, width, 30);
-                    ctx.fillStyle = primaryColor; ctx.fillRect(0, height - 45, width, 15);
+                    // 跟隨背景圖層 Offset 一起移動的色條
+                    const bx = decoOffsets.bars.x;
+                    const barBy = height - 30 + decoOffsets.bars.y;
+                    ctx.fillStyle = accentColor; ctx.fillRect(bx, barBy, width, 30);
+                    ctx.fillStyle = primaryColor; ctx.fillRect(bx, barBy - 15, width, 15);
                 }
 
                 if (showTags) {
@@ -545,25 +509,25 @@ const App = () => {
                 }
 
             } else if (currentTemplate === 'TechBright') {
+                // 科技版獨立背景圖層
+                const pOff = decoOffsets.poly;
+                const px = pOff.x; const py = pOff.y;
+                
                 ctx.fillStyle = hexToRgba(primaryColor, 0.1); ctx.beginPath();
-                ctx.moveTo(100, height); ctx.lineTo(250, height - 150); ctx.lineTo(width, height - 150); ctx.lineTo(width, height); ctx.closePath(); ctx.fill();
+                ctx.moveTo(100 + px, height + py); ctx.lineTo(250 + px, height - 150 + py); 
+                ctx.lineTo(width + px, height - 150 + py); ctx.lineTo(width + px, height + py); 
+                ctx.closePath(); ctx.fill();
+                
+                hitBoxes.current.deco = { key: 'poly', x: 100 + px, y: height - 150 + py, w: width - 100, h: 150 };
 
                 if (showLogo && (logoText || brandText)) {
-                    const logoFontSize = 24 * actualBrandScale;
-                    const subFontSize = 16 * actualBrandScale;
-                    const baseX = 30;
-                    const baseY = 50 * Math.max(1, actualBrandScale);
-
-                    ctx.fillStyle = textColor; 
-                    ctx.font = `900 ${logoFontSize}px "${titleFont}"`; 
-                    ctx.fillText(logoText, baseX, baseY);
+                    const logoFontSize = 24 * actualBrandScale; const subFontSize = 16 * actualBrandScale;
+                    const baseX = 30; const baseY = 50 * Math.max(1, actualBrandScale);
+                    ctx.fillStyle = textColor; ctx.font = `900 ${logoFontSize}px "${titleFont}"`; ctx.fillText(logoText, baseX, baseY);
 
                     const logoMetrics = ctx.measureText(logoText);
-                    const gap = logoText ? (10 * actualBrandScale) : 0;
-                    const pipeX = baseX + logoMetrics.width + gap;
-
-                    ctx.fillStyle = primaryColor; 
-                    ctx.font = `bold ${subFontSize}px "${titleFont}"`; 
+                    const gap = logoText ? (10 * actualBrandScale) : 0; const pipeX = baseX + logoMetrics.width + gap;
+                    ctx.fillStyle = primaryColor; ctx.font = `bold ${subFontSize}px "${titleFont}"`; 
                     ctx.fillText(`${logoText ? '| ' : ''}${brandText}`, pipeX, baseY - (2 * actualBrandScale));
                 }
                 
@@ -603,7 +567,7 @@ const App = () => {
         }
     };
     renderCanvas();
-  }, [image, iconImage, platform, template, promoText, tagsInput, brandText, logoText, isAiDisclosure, removeBg, primaryColor, accentColor, textColor, productScale, brandScale, textScale, tagScale, tagShape, showLogo, showTitle, showTags, titleFont, tagFont, iconScale, titleOffset, iconOffset, tagOffsets, productOffset]);
+  }, [image, iconImage, platform, template, promoText, tagsInput, brandText, logoText, isAiDisclosure, removeBg, primaryColor, accentColor, textColor, productScale, brandScale, textScale, tagScale, tagShape, showLogo, showTitle, showTags, titleFont, tagFont, iconScale, titleOffset, iconOffset, tagOffsets, productOffset, decoOffsets]);
 
   const complianceResult = checkCompliance(promoText + tagsInput);
 
@@ -618,7 +582,10 @@ const App = () => {
         <div style={{ background: activeTheme.gradient }} className="p-5 border-b text-white shrink-0 transition-colors duration-500">
           <h1 className="text-xl font-bold flex items-center gap-2 drop-shadow-sm">
             <ImageIcon className="w-6 h-6 text-white" />
-            馬尼製圖工廠 <span className="text-[10px] bg-white text-slate-900 px-2 py-0.5 rounded-full ml-1 font-black shadow-sm">AI 去背整合版</span>
+            馬尼製圖工廠 
+            <span className="text-[10px] bg-white text-slate-900 px-2 py-0.5 rounded-full ml-2 font-black shadow-sm flex items-center gap-1">
+                <Layers className="w-3 h-3" /> 圖層架構 v1.0
+            </span>
           </h1>
         </div>
 
@@ -677,7 +644,7 @@ const App = () => {
             </div>
           </section>
 
-          {/* 圖片上傳區 (支援 Drag & Drop 與 Remove.bg API) */}
+          {/* 圖片上傳區 */}
           <section className="bg-slate-50 p-4 rounded-xl border border-slate-100">
             <div className="flex justify-between items-center mb-3">
                 <label className="text-sm font-bold flex items-center gap-2 text-slate-700">
@@ -692,7 +659,6 @@ const App = () => {
                 </div>
             </div>
 
-            {/* Remove.bg API Key 設定區塊 */}
             {enableRemoveBgApi && (
                 <div className="mb-4 bg-purple-100/50 p-3 rounded-lg border border-purple-200">
                     <div className="flex items-center gap-2">
@@ -705,21 +671,14 @@ const App = () => {
                             className="w-full text-xs px-2 py-1.5 border border-purple-200 rounded focus:outline-none focus:border-purple-400 bg-white" 
                         />
                     </div>
-                    
-                    {/* 顯示去背次數追蹤 */}
                     <div className="flex items-center justify-between mt-2 ml-6">
                         <p className="text-[10px] text-purple-500">設定後將自動記憶。開啟此功能時，上傳新圖會自動呼叫 API 去背。</p>
                         <span className="text-[10px] font-bold text-purple-700 bg-purple-200 px-2 py-0.5 rounded-full shadow-sm">
                             本月已去背: {bgRemovalCount} 次
                         </span>
                     </div>
-                    
-                    {/* 若已有圖片但尚未去背，顯示手動按鈕 */}
                     {rawImage && !isRemovingBg && (
-                         <button 
-                             onClick={() => executeRemoveBg(rawImage)} 
-                             className="mt-2 w-full bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold py-1.5 rounded transition-colors"
-                         >
+                         <button onClick={() => executeRemoveBg(rawImage)} className="mt-2 w-full bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold py-1.5 rounded transition-colors">
                              ✨ 立即為目前圖片去背
                          </button>
                     )}
@@ -792,6 +751,10 @@ const App = () => {
             <label className="block text-sm font-bold mb-2 flex items-center gap-2 text-slate-700">
               <Type className="w-4 h-4" style={{ color: activeTheme.main }} /> 4. 文案設定與拖曳提示
             </label>
+            <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-xl flex items-start gap-2 text-xs text-emerald-800 font-bold mb-3 shadow-sm">
+                <Layers className="w-4 h-4 shrink-0 mt-0.5" />
+                <p>現在連背景的「邊框」與「色塊裝飾」都可以被滑鼠點擊拖曳了！</p>
+            </div>
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-5">
                 <div className={!showLogo ? 'opacity-40' : ''}>
                     <div className="flex justify-between items-center mb-2">
@@ -866,7 +829,7 @@ const App = () => {
                 <Palette className="w-4 h-4" style={{ color: activeTheme.main }} /> 6. 顏色與大小微調
                 </label>
                 <button onClick={resetPositions} className="text-xs flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded font-bold transition-colors">
-                    <RotateCcw className="w-3 h-3" /> 座標重置
+                    <RotateCcw className="w-3 h-3" /> 座標全部重置
                 </button>
             </div>
             
@@ -892,7 +855,6 @@ const App = () => {
                     <div className="bg-slate-50 p-4 rounded-lg border border-slate-100">
                         <div className="flex justify-between items-center mb-3">
                             <p className="text-xs font-black text-slate-600 flex items-center gap-1"><Camera className="w-4 h-4"/> 商品主體縮放 ({productScale}%)</p>
-                            <span className="text-[10px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded">支援畫布拖曳</span>
                         </div>
                         <input type="range" min="50" max="150" value={productScale} onChange={(e) => setProductScale(e.target.value)} className="w-full accent-slate-400" />
                     </div>
