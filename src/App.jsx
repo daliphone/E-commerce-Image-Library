@@ -11,6 +11,7 @@ const App = () => {
   
   // 視覺效果狀態
   const [removeBg, setRemoveBg] = useState(true); 
+  const [cyberBgMode, setCyberBgMode] = useState('dark'); // 新增：電競風深淺色切換
 
   // --- Remove.bg API ---
   const [enableRemoveBgApi, setEnableRemoveBgApi] = useState(false);
@@ -22,10 +23,13 @@ const App = () => {
   const [leftWidth, setLeftWidth] = useState(560); 
   const [isDragActive, setIsDragActive] = useState(false);
 
+  // 🛍️ 平台與色彩規範 (新增 Yahoo 雙平台)
   const THEMES = {
     Shopee: { name: '蝦皮購物', main: '#f97316', gradient: 'linear-gradient(135deg, #fb923c, #ef4444)', bg: '#fff7ed', border: '#fdba74', text: '#ea580c', allowText: true },
     Momo: { name: 'Momo 購物', main: '#ec4899', gradient: 'linear-gradient(135deg, #f472b6, #e11d48)', bg: '#fdf2f8', border: '#f9a8d4', text: '#be185d', allowText: false },
-    PChome: { name: 'PChome 24h', main: '#3b82f6', gradient: 'linear-gradient(135deg, #60a5fa, #ef4444)', bg: '#eff6ff', border: '#93c5fd', text: '#1d4ed8', allowText: true }
+    PChome: { name: 'PChome 24h', main: '#3b82f6', gradient: 'linear-gradient(135deg, #60a5fa, #ef4444)', bg: '#eff6ff', border: '#93c5fd', text: '#1d4ed8', allowText: true },
+    YahooAuction: { name: '奇摩拍賣', main: '#8b5cf6', gradient: 'linear-gradient(135deg, #a855f7, #6366f1)', bg: '#f5f3ff', border: '#c4b5fd', text: '#6d28d9', allowText: true },
+    YahooMall: { name: '奇摩購物中心', main: '#7c3aed', gradient: 'linear-gradient(135deg, #8b5cf6, #4c1d95)', bg: '#f5f3ff', border: '#a78bfa', text: '#5b21b6', allowText: false }
   };
   const activeTheme = THEMES[platform];
 
@@ -57,16 +61,22 @@ const App = () => {
   const [titleOffset, setTitleOffset] = useState({ x: 0, y: 0 });
   const [iconOffset, setIconOffset] = useState({ x: 150, y: -150 });
   const [tagOffsets, setTagOffsets] = useState([]);
-  const [decoOffsets, setDecoOffsets] = useState({ frame: { x: 0, y: 0 }, bars: { x: 0, y: 0 }, poly: { x: 0, y: 0 } });
+  
+  // 裝飾圖層位置狀態
+  const [decoOffsets, setDecoOffsets] = useState({ 
+      frame: { x: 0, y: 0 }, 
+      bars: { x: 0, y: 0 }, 
+      poly: { x: 0, y: 0 },
+      cyber: { x: 0, y: 0 },
+      premium: { x: 0, y: 0 }
+  });
 
-  // --- 🌟 進階編輯器功能狀態 🌟 ---
   const [lockedLayers, setLockedLayers] = useState({ product: false, deco: false, title: false, icon: false });
   const [activeLayer, setActiveLayer] = useState(null);
   const [rotations, setRotations] = useState({ product: 0, title: 0, icon: 0, deco: 0 });
   const [guideLines, setGuideLines] = useState({ x: null, y: null, active: false });
-  const [showHelpModal, setShowHelpModal] = useState(false); // 新增：控制操作說明彈出視窗
+  const [showHelpModal, setShowHelpModal] = useState(false); 
   
-  // 復原/重做歷史紀錄 (History Refs)
   const historyRef = useRef([]);
   const historyIndex = useRef(-1);
 
@@ -84,19 +94,21 @@ const App = () => {
 
   const BANNED_WORDS = ['第一', '最強', '最優', '療效', '根治', '殺頭價', '保證見效'];
 
+  // 🎨 視覺模板清單
   const TEMPLATES = {
     LightSoft: { name: '柔和明亮框', desc: '純白底+微漸層點綴' },
     LightClean: { name: '極簡亮白底', desc: '乾淨無框+底部色條' },
     TechBright: { name: '科技亮色切角', desc: '幾何裝飾+明亮質感' },
+    CyberNeon: { name: '霓虹電競風', desc: '深色底+螢光科技邊框' },
+    PremiumGold: { name: '奢華質感風', desc: '極簡莫蘭迪底+優雅雙框' },
     None: { name: '純淨白圖', desc: '僅商品與純白背景' }
   };
 
-  // --- 歷史紀錄機制 (History) ---
   const saveHistorySnapshot = () => {
-    const stateSnapshot = { productOffset, titleOffset, iconOffset, tagOffsets, decoOffsets, rotations, productScale, brandScale, textScale, tagScale, iconScale };
+    const stateSnapshot = { productOffset, titleOffset, iconOffset, tagOffsets, decoOffsets, rotations, productScale, brandScale, textScale, tagScale, iconScale, primaryColor, accentColor, textColor, cyberBgMode };
     historyRef.current = historyRef.current.slice(0, historyIndex.current + 1);
     historyRef.current.push(JSON.stringify(stateSnapshot));
-    if (historyRef.current.length > 30) historyRef.current.shift(); // 最多保留30步
+    if (historyRef.current.length > 30) historyRef.current.shift(); 
     else historyIndex.current++;
   };
 
@@ -119,25 +131,45 @@ const App = () => {
     setTagOffsets(state.tagOffsets); setDecoOffsets(state.decoOffsets); setRotations(state.rotations);
     setProductScale(state.productScale); setBrandScale(state.brandScale); setTextScale(state.textScale);
     setTagScale(state.tagScale); setIconScale(state.iconScale);
+    setCyberBgMode(state.cyberBgMode || 'dark');
+    if(state.primaryColor) setPrimaryColor(state.primaryColor);
+    if(state.accentColor) setAccentColor(state.accentColor);
+    if(state.textColor) setTextColor(state.textColor);
   };
 
-  // 初始化存入第一筆紀錄
-  useEffect(() => {
-      if (historyRef.current.length === 0) saveHistorySnapshot();
-  }, []);
+  useEffect(() => { if (historyRef.current.length === 0) saveHistorySnapshot(); }, []);
 
-  // --- 鍵盤快捷鍵 (Keyboard Shortcuts) ---
+  // --- 💡 智慧模板與色彩預設切換 ---
+  const handleTemplateChange = (t) => {
+      setTemplate(t);
+      if (t === 'CyberNeon') {
+          setPrimaryColor('#00f6ff'); 
+          setAccentColor('#bc13fe');  
+          setTextColor(cyberBgMode === 'dark' ? '#ffffff' : '#1e293b');    
+      } else if (t === 'PremiumGold') {
+          setPrimaryColor('#d4af37'); 
+          setAccentColor('#8c7b66');  
+          setTextColor('#2c3e50');    
+      } else if (t === 'LightSoft' || t === 'LightClean' || t === 'TechBright') {
+          setPrimaryColor(THEMES[platform].main); 
+          setTextColor('#1e293b');
+      }
+      setTimeout(saveHistorySnapshot, 50);
+  };
+
+  const handleCyberBgToggle = (mode) => {
+      setCyberBgMode(mode);
+      setTextColor(mode === 'dark' ? '#ffffff' : '#1e293b');
+      setTimeout(saveHistorySnapshot, 50);
+  };
+
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-
-      // Undo / Redo (Ctrl+Z / Ctrl+Y)
       if (e.ctrlKey || e.metaKey) {
           if (e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? handleRedo() : handleUndo(); return; }
           if (e.key.toLowerCase() === 'y') { e.preventDefault(); handleRedo(); return; }
       }
-
-      // 鍵盤微調位移 (Nudging)
       if (activeLayer) {
           const step = e.shiftKey ? 10 : 1;
           let dx = 0, dy = 0;
@@ -160,7 +192,6 @@ const App = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [activeLayer]);
 
-  // 監聽鍵盤鬆開儲存步驟
   useEffect(() => {
     const handleKeyUp = (e) => { if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) && activeLayer) saveHistorySnapshot(); };
     window.addEventListener('keyup', handleKeyUp);
@@ -256,7 +287,6 @@ const App = () => {
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
   };
 
-  // --- GAS ---
   const saveToGAS = async () => {
     if (!gasUrl) { setCloudMessage({ text: '請先輸入 GAS 網址！', type: 'error' }); return; }
     if (!projectName.trim()) { setCloudMessage({ text: '請輸入樣板名稱！', type: 'error' }); return; }
@@ -267,7 +297,7 @@ const App = () => {
       projectName, platform, template, removeBg, primaryColor, accentColor, textColor,
       logoText, brandText, promoText, tagsInput, isAiDisclosure, tagShape, showLogo, showTitle, showTags,
       titleFont, tagFont, productScale, brandScale, textScale, tagScale, iconScale, 
-      productOffset, titleOffset, iconOffset, tagOffsets, decoOffsets, rotations,
+      productOffset, titleOffset, iconOffset, tagOffsets, decoOffsets, rotations, cyberBgMode,
       imageBase64: image, iconImageBase64: iconImage
     };
 
@@ -303,8 +333,9 @@ const App = () => {
     setTagScale(params.tagScale); setIconScale(params.iconScale); setTitleOffset(params.titleOffset);
     setIconOffset(params.iconOffset); setTagOffsets(params.tagOffsets);
     setProductOffset(params.productOffset || { x: 0, y: params.productOffsetY || 0 });
-    setDecoOffsets(params.decoOffsets || { frame: { x: 0, y: 0 }, bars: { x: 0, y: 0 }, poly: { x: 0, y: 0 } });
+    setDecoOffsets(params.decoOffsets || { frame: { x: 0, y: 0 }, bars: { x: 0, y: 0 }, poly: { x: 0, y: 0 }, cyber: {x:0, y:0}, premium: {x:0, y:0} });
     setRotations(params.rotations || { product: 0, title: 0, icon: 0, deco: 0 });
+    setCyberBgMode(params.cyberBgMode || 'dark');
 
     if (params.savedMainImageUrl) { setImage(params.savedMainImageUrl); setRawImage(params.savedMainImageUrl); }
     if (params.savedIconImageUrl) setIconImage(params.savedIconImageUrl);
@@ -314,7 +345,6 @@ const App = () => {
     setTimeout(() => saveHistorySnapshot(), 100); 
   };
 
-  // --- 滑鼠與拖曳互動 ---
   const getMousePos = (e) => {
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
@@ -324,6 +354,16 @@ const App = () => {
   };
 
   const handleMouseDown = (e) => {
+    if (!activeTheme.allowText) {
+        const { x, y } = getMousePos(e);
+        const boxes = hitBoxes.current;
+        if (!lockedLayers.product && image && boxes.product && x >= boxes.product.x && x <= boxes.product.x + boxes.product.w && y >= boxes.product.y && y <= boxes.product.y + boxes.product.h) {
+            dragInfo.current = { isDragging: true, target: { type: 'product' }, startX: x, startY: y, initialOffset: productOffset };
+            setActiveLayer({ type: 'product' }); return;
+        }
+        setActiveLayer(null); return; 
+    }
+    
     const { x, y } = getMousePos(e);
     const boxes = hitBoxes.current;
     let clickedSomething = false;
@@ -331,12 +371,6 @@ const App = () => {
     if (!lockedLayers.icon && iconImage && boxes.icon && x >= boxes.icon.x && x <= boxes.icon.x + boxes.icon.w && y >= boxes.icon.y && y <= boxes.icon.y + boxes.icon.h) {
         dragInfo.current = { isDragging: true, target: { type: 'icon' }, startX: x, startY: y, initialOffset: iconOffset }; 
         setActiveLayer({ type: 'icon' }); clickedSomething = true;
-    }
-    else if (!activeTheme.allowText && platform === 'Momo') {
-        if (!lockedLayers.product && image && boxes.product && x >= boxes.product.x && x <= boxes.product.x + boxes.product.w && y >= boxes.product.y && y <= boxes.product.y + boxes.product.h) {
-            dragInfo.current = { isDragging: true, target: { type: 'product' }, startX: x, startY: y, initialOffset: productOffset };
-            setActiveLayer({ type: 'product' }); clickedSomething = true;
-        }
     } else {
         if (!clickedSomething) {
             for (let i = boxes.tags.length - 1; i >= 0; i--) {
@@ -366,6 +400,8 @@ const App = () => {
   };
 
   const handleMouseMove = (e) => {
+    if (!activeTheme.allowText && !dragInfo.current.isDragging) return;
+
     const { x, y } = getMousePos(e);
     
     if (dragInfo.current.isDragging) {
@@ -376,13 +412,11 @@ const App = () => {
         let newX = initialOffset.x + dx;
         let newY = initialOffset.y + dy;
 
-        // 🌟 智慧吸附 (Snapping) - 靠近 0 (中心點) 時自動吸附 🌟
-        const SNAP_TOL = 12;
-        let isSnapped = false;
+        const SNAP_TOL = 12; let isSnapped = false;
         if (Math.abs(newX) < SNAP_TOL) { newX = 0; isSnapped = true; }
         if (Math.abs(newY) < SNAP_TOL) { newY = 0; isSnapped = true; }
         
-        setGuideLines({ active: isSnapped, x: newX === 0 ? 400 : null, y: newY === 0 ? 400 : null }); // 假設畫布中點是400
+        setGuideLines({ active: isSnapped, x: newX === 0 ? 400 : null, y: newY === 0 ? 400 : null });
 
         if (target.type === 'title') setTitleOffset({ x: newX, y: newY });
         else if (target.type === 'icon') setIconOffset({ x: newX, y: newY });
@@ -415,15 +449,12 @@ const App = () => {
   };
 
   const handleMouseUpOrLeave = () => { 
-      if (dragInfo.current.isDragging) {
-          saveHistorySnapshot(); 
-      }
+      if (dragInfo.current.isDragging) { saveHistorySnapshot(); }
       dragInfo.current.isDragging = false; 
       setGuideLines({x: null, y: null, active: false});
       if (canvasRef.current) canvasRef.current.style.cursor = 'default'; 
   };
 
-  // --- 畫布滾輪事件 (旋轉) ---
   const handleWheel = (e) => {
       if (!activeLayer) return;
       if (e.shiftKey) {
@@ -441,7 +472,7 @@ const App = () => {
   const resetPositions = () => { 
       setTitleOffset({x: 0, y: 0}); setIconOffset({x: 150, y: -150}); 
       setTagOffsets(tagOffsets.map(() => ({x: 0, y: 0}))); setProductOffset({x: 0, y: 0}); 
-      setDecoOffsets({ frame: {x:0, y:0}, bars: {x:0, y:0}, poly: {x:0, y:0} });
+      setDecoOffsets({ frame: {x:0, y:0}, bars: {x:0, y:0}, poly: {x:0, y:0}, cyber: {x:0, y:0}, premium: {x:0, y:0} });
       setRotations({ product: 0, title: 0, icon: 0, deco: 0 });
       setTimeout(() => saveHistorySnapshot(), 50);
   };
@@ -451,7 +482,7 @@ const App = () => {
       if (activeLayer?.type === layerName) setActiveLayer(null); 
   };
 
-  // --- 畫布繪製 ---
+  // --- 畫布繪製邏輯 ---
   useEffect(() => {
     if (!canvasRef.current) return;
     const canvas = canvasRef.current;
@@ -486,22 +517,30 @@ const App = () => {
 
     const renderCanvas = async () => {
         ctx.clearRect(0, 0, width, height);
-        ctx.fillStyle = '#FFFFFF';
+        
+        const isMomoOrYahooMall = !THEMES[platform].allowText;
+        const currentTemplate = isMomoOrYahooMall ? 'None' : template;
+
+        // 🎨 背景層填充
+        if (currentTemplate === 'CyberNeon') {
+            ctx.fillStyle = cyberBgMode === 'dark' ? '#0f172a' : '#f0f4f8'; // 電競底色切換
+        } else if (currentTemplate === 'PremiumGold') {
+            ctx.fillStyle = '#faf9f6'; // 燕麥白
+        } else {
+            ctx.fillStyle = '#FFFFFF';
+        }
         ctx.fillRect(0, 0, width, height);
 
         const mImg = image ? await loadImg(image) : null;
         const iImg = iconImage ? await loadImg(iconImage) : null;
 
-        const isMomo = !THEMES[platform].allowText;
-        const currentTemplate = isMomo ? 'None' : template;
-
         // 1. 繪製圖層化背景裝飾
         if (currentTemplate === 'LightSoft') {
             const grad = ctx.createRadialGradient(width/2, height/2, 100, width/2, height/2, width);
-            grad.addColorStop(0, '#FFFFFF'); grad.addColorStop(1, hexToRgba(primaryColor, 0.08)); 
+            grad.addColorStop(0, 'rgba(255,255,255,0)'); grad.addColorStop(1, hexToRgba(primaryColor, 0.08)); 
             ctx.fillStyle = grad; ctx.fillRect(0, 0, width, height);
             
-            const fOff = decoOffsets.frame;
+            const fOff = decoOffsets.frame || {x:0, y:0};
             const fw = width - 30; const fh = height - 30;
             const fx = 15 + fOff.x; const fy = 15 + fOff.y;
             
@@ -511,20 +550,59 @@ const App = () => {
             hitBoxes.current.deco = { key: 'frame', x: fx, y: fy, w: fw, h: fh };
             
         } else if (currentTemplate === 'LightClean') {
-             const bOff = decoOffsets.bars;
+             const bOff = decoOffsets.bars || {x:0, y:0};
              const bx = bOff.x; const by = height - 150 + bOff.y;
              
              drawWithRotation(ctx, bx, by, width, 150, rotations.deco, (c, x, y, w, h) => {
                  const grad = c.createLinearGradient(0, y, 0, y + h);
-                 grad.addColorStop(0, '#FFFFFF'); grad.addColorStop(1, hexToRgba(primaryColor, 0.15));
+                 grad.addColorStop(0, 'rgba(255,255,255,0)'); grad.addColorStop(1, hexToRgba(primaryColor, 0.15));
                  c.fillStyle = grad; c.fillRect(x, y, w, h);
              }, 'deco', 'bars');
              hitBoxes.current.deco = { key: 'bars', x: bx, y: by, w: width, h: 150 };
+
+        } else if (currentTemplate === 'TechBright') {
+            const pOff = decoOffsets.poly || {x:0, y:0};
+            const px = pOff.x; const py = pOff.y;
+            
+            drawWithRotation(ctx, 100 + px, height - 150 + py, width - 100, 150, rotations.deco, (c, x, y, w, h) => {
+                c.fillStyle = hexToRgba(primaryColor, 0.1); c.beginPath();
+                c.moveTo(x, y + h); c.lineTo(x + 150, y); c.lineTo(x + w, y); c.lineTo(x + w, y + h); 
+                c.closePath(); c.fill();
+            }, 'deco', 'poly');
+            hitBoxes.current.deco = { key: 'poly', x: 100 + px, y: height - 150 + py, w: width - 100, h: 150 };
+
+        } else if (currentTemplate === 'CyberNeon') {
+            const cOff = decoOffsets.cyber || {x:0, y:0};
+            const cx = 30 + cOff.x; const cy = 30 + cOff.y;
+            const cw = width - 60; const ch = height - 60;
+            
+            drawWithRotation(ctx, cx, cy, cw, ch, rotations.deco, (c, x, y, w, h) => {
+                c.strokeStyle = primaryColor; c.lineWidth = 3;
+                c.shadowColor = primaryColor; c.shadowBlur = cyberBgMode === 'dark' ? 15 : 8; 
+                c.strokeRect(x, y, w, h);
+                c.beginPath(); c.moveTo(x - 15, y + 40); c.lineTo(x, y + 40); c.stroke();
+                c.beginPath(); c.moveTo(x - 15, y + h - 40); c.lineTo(x, y + h - 40); c.stroke();
+                c.beginPath(); c.moveTo(x + w + 15, y + 40); c.lineTo(x + w, y + 40); c.stroke();
+                c.shadowBlur = 0; 
+            }, 'deco', 'cyber');
+            hitBoxes.current.deco = { key: 'cyber', x: cx, y: cy, w: cw, h: ch };
+
+        } else if (currentTemplate === 'PremiumGold') {
+            const pOff = decoOffsets.premium || {x:0, y:0};
+            const px = 40 + pOff.x; const py = 40 + pOff.y;
+            const pw = width - 80; const ph = height - 80;
+            
+            drawWithRotation(ctx, px, py, pw, ph, rotations.deco, (c, x, y, w, h) => {
+                c.strokeStyle = primaryColor; 
+                c.lineWidth = 1; c.strokeRect(x, y, w, h); 
+                c.lineWidth = 0.5; c.strokeRect(x + 10, y + 10, w - 20, h - 20); 
+            }, 'deco', 'premium');
+            hitBoxes.current.deco = { key: 'premium', x: px, y: py, w: pw, h: ph };
         }
 
         // 2. 商品主體層
         let baseScale = 0.75; let baseYOffset = showTitle ? 20 : 0;
-        if (currentTemplate === 'TechBright') { baseScale = 0.65; baseYOffset = showTitle ? -20 : 0; }
+        if (currentTemplate === 'TechBright' || currentTemplate === 'CyberNeon') { baseScale = 0.65; baseYOffset = showTitle ? -20 : 0; }
 
         const finalScale = baseScale * (productScale / 100);
         const w = width * finalScale;
@@ -533,10 +611,36 @@ const App = () => {
         const y = (height - h) / 2 + baseYOffset + productOffset.y;
 
         if (mImg) hitBoxes.current.product = { x, y, w, h };
-        if (removeBg && mImg) { ctx.shadowColor = 'rgba(0,0,0,0.08)'; ctx.shadowBlur = 30; ctx.shadowOffsetY = 15; }
         
         drawWithRotation(ctx, x, y, w, h, rotations.product, (c, dx, dy, dw, dh) => {
-            if (mImg) { c.drawImage(mImg, dx, dy, dw, dh); c.shadowBlur = 0; c.shadowOffsetY = 0; } 
+            if (currentTemplate === 'CyberNeon') {
+                const cx = dx + dw/2; const cy = dy + dh/2;
+                const radius = Math.max(dw, dh) * 0.7;
+                const glowGrad = c.createRadialGradient(cx, cy, 0, cx, cy, radius);
+                
+                // 深/淺底光暈透明度微調
+                const op1 = cyberBgMode === 'dark' ? 0.4 : 0.25;
+                const op2 = cyberBgMode === 'dark' ? 0.15 : 0.1;
+                const bgEnd = cyberBgMode === 'dark' ? 'rgba(15, 23, 42, 0)' : 'rgba(240, 244, 248, 0)';
+                
+                glowGrad.addColorStop(0, hexToRgba(primaryColor, op1));
+                glowGrad.addColorStop(0.5, hexToRgba(accentColor, op2));
+                glowGrad.addColorStop(1, bgEnd);
+                c.fillStyle = glowGrad;
+                c.beginPath(); c.arc(cx, cy, radius, 0, Math.PI * 2); c.fill();
+            }
+
+            if (mImg) { 
+                if (removeBg) {
+                    if (currentTemplate === 'CyberNeon') {
+                        c.shadowColor = primaryColor; c.shadowBlur = cyberBgMode === 'dark' ? 40 : 25; c.shadowOffsetY = 0;
+                    } else {
+                        c.shadowColor = 'rgba(0,0,0,0.08)'; c.shadowBlur = 30; c.shadowOffsetY = 15;
+                    }
+                }
+                c.drawImage(mImg, dx, dy, dw, dh); 
+                c.shadowBlur = 0; c.shadowOffsetY = 0; 
+            } 
             else {
                 c.fillStyle = '#f8fafc'; c.fillRect(dx, dy, dw, dh); c.strokeStyle = '#e2e8f0'; c.strokeRect(dx, dy, dw, dh);
                 c.fillStyle = '#94a3b8'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = '20px sans-serif';
@@ -544,8 +648,8 @@ const App = () => {
             }
         }, 'product');
 
-        // 3. 裝飾與文字層
-        if (!isMomo) {
+        // 3. 裝飾與文字層 
+        if (!isMomoOrYahooMall) {
             const tags = tagsInput.split(',').map(t => t.trim()).filter(t => t);
             const actualTextScale = textScale / 100;
             const actualTagScale = tagScale / 100;
@@ -579,55 +683,12 @@ const App = () => {
                 }
 
                 if (currentTemplate === 'LightClean') {
-                    const bx = decoOffsets.bars.x; const barBy = height - 30 + decoOffsets.bars.y;
+                    const bx = decoOffsets.bars?.x || 0; const barBy = height - 30 + (decoOffsets.bars?.y || 0);
                     ctx.fillStyle = accentColor; ctx.fillRect(bx, barBy, width, 30);
                     ctx.fillStyle = primaryColor; ctx.fillRect(bx, barBy - 15, width, 15);
                 }
 
-                if (showTags) {
-                    const tagBaseY = currentTemplate === 'LightSoft' ? height - 90 : height - 120;
-                    const tagHeight = 45 * actualTagScale;
-                    let totalTagsWidth = 0;
-                    ctx.font = `bold ${20 * actualTagScale}px "${tagFont}"`;
-                    const tagPaddings = [];
-                    tags.forEach(tag => { const tw = ctx.measureText(tag).width + (40 * actualTagScale); totalTagsWidth += tw + 15; tagPaddings.push(tw); });
-                    totalTagsWidth -= 15;
-
-                    let startX = (width - totalTagsWidth) / 2;
-                    tags.forEach((tag, i) => {
-                        const offset = tagOffsets[i] || {x: 0, y: 0};
-                        const currentX = startX + offset.x; const currentY = tagBaseY + offset.y;
-                        const radius = tagShape === 'pill' ? (tagHeight/2) : (tagShape === 'rect' ? 8 : (tagHeight/2));
-                        hitBoxes.current.tags[i] = { x: currentX, y: currentY, w: tagPaddings[i], h: tagHeight };
-                        
-                        const isActive = activeLayer?.type === 'tag' && activeLayer?.index === i;
-                        if (isActive) { ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 2; ctx.setLineDash([4, 4]); ctx.strokeRect(currentX - 2, currentY - 2, tagPaddings[i] + 4, tagHeight + 4); ctx.setLineDash([]); }
-
-                        if (tagShape === 'outline') {
-                            ctx.strokeStyle = accentColor; ctx.lineWidth = 2.5;
-                            roundRect(ctx, currentX, currentY, tagPaddings[i], tagHeight, radius, true);
-                            ctx.fillStyle = accentColor;
-                        } else {
-                            ctx.fillStyle = accentColor; roundRect(ctx, currentX, currentY, tagPaddings[i], tagHeight, radius, false);
-                            ctx.fillStyle = '#FFFFFF';
-                        }
-                        ctx.textAlign = 'center'; ctx.fillText(tag, currentX + tagPaddings[i]/2, currentY + (tagHeight * 0.68));
-                        startX += tagPaddings[i] + 15; 
-                    });
-                    ctx.textAlign = 'left';
-                }
-
             } else if (currentTemplate === 'TechBright') {
-                const pOff = decoOffsets.poly;
-                const px = pOff.x; const py = pOff.y;
-                
-                drawWithRotation(ctx, 100 + px, height - 150 + py, width - 100, 150, rotations.deco, (c, x, y, w, h) => {
-                    c.fillStyle = hexToRgba(primaryColor, 0.1); c.beginPath();
-                    c.moveTo(x, y + h); c.lineTo(x + 150, y); c.lineTo(x + w, y); c.lineTo(x + w, y + h); 
-                    c.closePath(); c.fill();
-                }, 'deco', 'poly');
-                hitBoxes.current.deco = { key: 'poly', x: 100 + px, y: height - 150 + py, w: width - 100, h: 150 };
-
                 if (showLogo && (logoText || brandText)) {
                     const logoFontSize = 24 * actualBrandScale; const subFontSize = 16 * actualBrandScale;
                     const baseX = 30; const baseY = 50 * Math.max(1, actualBrandScale);
@@ -652,23 +713,101 @@ const App = () => {
                     }, 'title');
                     hitBoxes.current.title = { x: finalTx, y: finalTy - fontSize, w: Math.max(150, tW), h: tH + 10 };
                 }
-                if (showTags) {
-                    ctx.font = `bold ${22 * actualTagScale}px "${tagFont}"`;
-                    const baseTechTagY = 150;
-                    tags.forEach((tag, i) => {
-                        const offset = tagOffsets[i] || {x: 0, y: 0};
-                        const cx = 40 + offset.x; const cy = baseTechTagY + i * 50 + offset.y;
-                        const tW = ctx.measureText(tag).width;
-                        const isActive = activeLayer?.type === 'tag' && activeLayer?.index === i;
-                        if (isActive) { ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 2; ctx.setLineDash([4, 4]); ctx.strokeRect(cx - 12, cy - 17, tW + 40, 34); ctx.setLineDash([]); }
-                        
-                        ctx.beginPath(); ctx.arc(cx, cy, 6, 0, Math.PI * 2); ctx.fillStyle = accentColor; ctx.fill();
-                        ctx.fillStyle = textColor; ctx.fillText(tag, cx + 20, cy + 8);
-                        hitBoxes.current.tags[i] = { x: cx - 10, y: cy - 15, w: tW + 35, h: 30 };
-                    });
+
+            } else if (currentTemplate === 'CyberNeon') {
+                if (showLogo && (logoText || brandText)) {
+                    const logoFontSize = 20 * actualBrandScale;
+                    const tx = 45; const ty = 50 * Math.max(1, actualBrandScale);
+                    ctx.fillStyle = primaryColor; ctx.font = `italic 900 ${logoFontSize}px "${titleFont}"`;
+                    ctx.shadowColor = primaryColor; ctx.shadowBlur = cyberBgMode === 'dark' ? 10 : 5;
+                    ctx.fillText(`${logoText} ${brandText}`, tx, ty);
+                    ctx.shadowBlur = 0;
+                }
+                if (showTitle) {
+                    const fontSize = 38 * actualTextScale;
+                    ctx.font = `italic 900 ${fontSize}px "${titleFont}"`;
+                    const tW = ctx.measureText(promoText).width; const tH = fontSize + 10;
+                    const finalTx = width/2 + titleOffset.x - tW/2; const finalTy = height - 100 + titleOffset.y - tH/2;
+                    
+                    drawWithRotation(ctx, finalTx, finalTy, tW, tH, rotations.title, (c, dx, dy, dw, dh) => {
+                        c.fillStyle = textColor; c.shadowColor = accentColor; c.shadowBlur = cyberBgMode === 'dark' ? 15 : 8;
+                        c.textAlign = 'center'; c.textBaseline = 'middle';
+                        c.fillText(promoText, dx + dw/2, dy + dh/2);
+                        c.shadowBlur = 0; c.textBaseline = 'alphabetic'; c.textAlign = 'left';
+                    }, 'title');
+                    hitBoxes.current.title = { x: finalTx, y: finalTy, w: tW, h: tH };
+                }
+
+            } else if (currentTemplate === 'PremiumGold') {
+                if (showLogo && brandText) {
+                    const badgeFontSize = 16 * actualBrandScale;
+                    ctx.font = `${badgeFontSize}px "${titleFont}"`; 
+                    ctx.fillStyle = textColor; ctx.textAlign = 'center';
+                    ctx.fillText(brandText, width/2, 70 * actualBrandScale);
+                    ctx.textAlign = 'left';
+                }
+                if (showTitle) {
+                    const fontSize = 32 * actualTextScale;
+                    ctx.font = `300 ${fontSize}px "${titleFont}"`; 
+                    const tW = ctx.measureText(promoText).width; const tH = fontSize + 10;
+                    const finalTx = width/2 + titleOffset.x - tW/2; const finalTy = height - 120 + titleOffset.y - tH/2;
+                    
+                    drawWithRotation(ctx, finalTx, finalTy, tW, tH, rotations.title, (c, dx, dy, dw, dh) => {
+                        c.fillStyle = textColor; c.textAlign = 'center'; c.textBaseline = 'middle';
+                        c.fillText(promoText, dx + dw/2, dy + dh/2);
+                        c.textBaseline = 'alphabetic'; c.textAlign = 'left';
+                    }, 'title');
+                    hitBoxes.current.title = { x: finalTx, y: finalTy, w: tW, h: tH };
                 }
             }
 
+            // 共同標籤
+            if (showTags) {
+                const isPremium = currentTemplate === 'PremiumGold';
+                const isCyber = currentTemplate === 'CyberNeon';
+                
+                let tagBaseY = currentTemplate === 'LightSoft' ? height - 90 : height - 120;
+                if (isCyber) tagBaseY = 120; 
+                if (isPremium) tagBaseY = height - 70; 
+
+                const tagHeight = (isPremium ? 35 : 45) * actualTagScale;
+                let totalTagsWidth = 0;
+                ctx.font = `bold ${isPremium ? 16 : 20 * actualTagScale}px "${tagFont}"`;
+                const tagPaddings = [];
+                tags.forEach(tag => { const tw = ctx.measureText(tag).width + (isPremium ? 30 : 40 * actualTagScale); totalTagsWidth += tw + 15; tagPaddings.push(tw); });
+                totalTagsWidth -= 15;
+
+                let startX = (width - totalTagsWidth) / 2;
+                tags.forEach((tag, i) => {
+                    const offset = tagOffsets[i] || {x: 0, y: 0};
+                    const currentX = startX + offset.x; const currentY = tagBaseY + offset.y;
+                    
+                    let radius = tagShape === 'pill' ? (tagHeight/2) : (tagShape === 'rect' ? 8 : (tagHeight/2));
+                    if (isPremium) radius = 0; 
+
+                    hitBoxes.current.tags[i] = { x: currentX, y: currentY, w: tagPaddings[i], h: tagHeight };
+                    
+                    const isActive = activeLayer?.type === 'tag' && activeLayer?.index === i;
+                    if (isActive) { ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 2; ctx.setLineDash([4, 4]); ctx.strokeRect(currentX - 2, currentY - 2, tagPaddings[i] + 4, tagHeight + 4); ctx.setLineDash([]); }
+
+                    if (tagShape === 'outline' || isPremium) {
+                        ctx.strokeStyle = isPremium ? primaryColor : accentColor; ctx.lineWidth = isPremium ? 1 : 2.5;
+                        if(isCyber) { ctx.shadowColor = accentColor; ctx.shadowBlur = cyberBgMode === 'dark' ? 10 : 5; }
+                        roundRect(ctx, currentX, currentY, tagPaddings[i], tagHeight, radius, true);
+                        ctx.shadowBlur = 0; ctx.fillStyle = isPremium ? textColor : accentColor;
+                    } else {
+                        ctx.fillStyle = accentColor; 
+                        if(isCyber) { ctx.shadowColor = accentColor; ctx.shadowBlur = cyberBgMode === 'dark' ? 15 : 8; }
+                        roundRect(ctx, currentX, currentY, tagPaddings[i], tagHeight, radius, false);
+                        ctx.shadowBlur = 0; ctx.fillStyle = '#FFFFFF';
+                    }
+                    ctx.textAlign = 'center'; ctx.fillText(tag, currentX + tagPaddings[i]/2, currentY + (tagHeight * 0.68));
+                    startX += tagPaddings[i] + 15; 
+                });
+                ctx.textAlign = 'left';
+            }
+
+            // 外部圖示
             if (iImg) {
                 const iW = width * (iconScale / 100); const iH = (iImg.height / iImg.width) * iW;
                 const ix = (width / 2) - (iW / 2) + iconOffset.x; const iy = (height / 2) - (iH / 2) + iconOffset.y;
@@ -683,7 +822,6 @@ const App = () => {
           ctx.fillStyle = 'rgba(150, 150, 150, 0.6)'; ctx.font = '11px Arial'; ctx.fillText('AI Generated', width - 85, 20);
         }
         
-        // 🌟 繪製智慧輔助線 (Snapping Guides) 🌟
         if (guideLines.active) {
             ctx.strokeStyle = '#f472b6'; ctx.lineWidth = 1; ctx.setLineDash([5, 5]);
             if (guideLines.x) { ctx.beginPath(); ctx.moveTo(width/2, 0); ctx.lineTo(width/2, height); ctx.stroke(); }
@@ -692,7 +830,7 @@ const App = () => {
         }
     };
     renderCanvas();
-  }, [image, iconImage, platform, template, promoText, tagsInput, brandText, logoText, isAiDisclosure, removeBg, primaryColor, accentColor, textColor, productScale, brandScale, textScale, tagScale, tagShape, showLogo, showTitle, showTags, titleFont, tagFont, iconScale, titleOffset, iconOffset, tagOffsets, productOffset, decoOffsets, activeLayer, rotations, guideLines]);
+  }, [image, iconImage, platform, template, promoText, tagsInput, brandText, logoText, isAiDisclosure, removeBg, primaryColor, accentColor, textColor, productScale, brandScale, textScale, tagScale, tagShape, showLogo, showTitle, showTags, titleFont, tagFont, iconScale, titleOffset, iconOffset, tagOffsets, productOffset, decoOffsets, activeLayer, rotations, guideLines, cyberBgMode]);
 
   const complianceResult = checkCompliance(promoText + tagsInput);
 
@@ -710,11 +848,10 @@ const App = () => {
                 <ImageIcon className="w-6 h-6 text-white" />
                 馬尼製圖工廠 
                 <span className="text-[10px] bg-white text-slate-900 px-2 py-0.5 rounded-full ml-2 font-black shadow-sm flex items-center gap-1">
-                    <Layers className="w-3 h-3 text-sky-500" /> 旗艦編輯器版
+                    <Layers className="w-3 h-3 text-sky-500" /> Yahoo 雙平台+全風格版
                 </span>
               </h1>
               
-              {/* Undo / Redo 工具列 */}
               <div className="flex bg-black/20 rounded-lg p-1 backdrop-blur-sm">
                   <button onClick={handleUndo} disabled={historyIndex.current <= 0} className="p-1.5 text-white disabled:opacity-30 hover:bg-white/20 rounded transition-colors" title="復原 (Ctrl+Z)"><Undo2 className="w-4 h-4" /></button>
                   <button onClick={handleRedo} disabled={historyIndex.current >= historyRef.current.length - 1} className="p-1.5 text-white disabled:opacity-30 hover:bg-white/20 rounded transition-colors" title="重做 (Ctrl+Y)"><Redo2 className="w-4 h-4" /></button>
@@ -724,7 +861,6 @@ const App = () => {
 
         <div className="flex-1 overflow-y-auto p-5 space-y-6 custom-scrollbar pb-28">
           
-          {/* 精簡版進階操作提示 */}
           <div className="bg-sky-50 border border-sky-200 p-3 rounded-xl shadow-sm text-xs text-sky-800 flex items-start gap-3">
               <MousePointer2 className="w-5 h-5 text-sky-500 shrink-0 mt-0.5" />
               <div className="w-full">
@@ -817,25 +953,32 @@ const App = () => {
             </div>
           </section>
 
-          {/* 平台與模板 */}
+          {/* 平台適配區 (含 Yahoo) */}
           <section className="space-y-5">
              <div>
                 <label className="block text-sm font-bold mb-2 flex items-center gap-2 text-slate-700">
-                <Layout className="w-4 h-4" style={{ color: activeTheme.main }} /> 2. 平台適配 (動態換色)
+                <Layout className="w-4 h-4" style={{ color: activeTheme.main }} /> 2. 平台適配 (規範與動態換色)
                 </label>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="flex flex-wrap gap-3">
                 {Object.keys(THEMES).map(p => (
-                    <button key={p} onClick={() => {setPlatform(p); setTimeout(saveHistorySnapshot,0);}} className={`py-2.5 px-2 text-sm font-bold rounded-lg border-2 transition-all ${platform === p ? 'shadow-md bg-white' : 'border-slate-100 bg-slate-50 text-slate-400 hover:border-slate-200'}`} style={platform === p ? { borderColor: THEMES[p].main, color: THEMES[p].main } : {}}>
+                    <button key={p} onClick={() => {setPlatform(p); setTimeout(saveHistorySnapshot,0);}} className={`flex-1 min-w-[120px] py-2.5 px-2 text-sm font-bold rounded-lg border-2 transition-all ${platform === p ? 'shadow-md bg-white' : 'border-slate-100 bg-slate-50 text-slate-400 hover:border-slate-200'}`} style={platform === p ? { borderColor: THEMES[p].main, color: THEMES[p].main } : {}}>
                     {THEMES[p].name}
                     </button>
                 ))}
                 </div>
+                {/* 顯示嚴格規範提示 */}
+                {!activeTheme.allowText && (
+                    <p className="mt-2 text-[11px] text-red-500 font-bold flex items-center gap-1 bg-red-50 p-2 rounded border border-red-100">
+                        <AlertTriangle className="w-3 h-3" /> 此平台規範極度嚴格，已自動切換為純白底且隱藏所有文字與裝飾。
+                    </p>
+                )}
              </div>
              
+             {/* 視覺模板區 (含電競/質感) */}
              <div className={!activeTheme.allowText ? 'opacity-30 pointer-events-none' : ''}>
                 <div className="flex justify-between items-center mb-2">
                     <label className="text-sm font-bold flex items-center gap-2 text-slate-700">
-                        <Box className="w-4 h-4" style={{ color: activeTheme.main }} /> 3. 亮色系視覺模板
+                        <Box className="w-4 h-4" style={{ color: activeTheme.main }} /> 3. 視覺風格模板
                     </label>
                     <button onClick={() => toggleLock('deco')} className={`p-1.5 rounded-md border transition-colors ${lockedLayers.deco ? 'bg-red-50 border-red-200 text-red-500' : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'}`} title="鎖定背景裝飾圖層防誤觸">
                         {lockedLayers.deco ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
@@ -843,12 +986,20 @@ const App = () => {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                 {Object.keys(TEMPLATES).map(t => (
-                    <div key={t} onClick={() => {setTemplate(t); setTimeout(saveHistorySnapshot,0);}} className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${template === t ? 'bg-white shadow-sm' : 'border-slate-100 bg-slate-50 hover:border-slate-200'}`} style={template === t ? { borderColor: activeTheme.main, color: activeTheme.main } : {}}>
+                    <div key={t} onClick={() => handleTemplateChange(t)} className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${template === t ? 'bg-white shadow-sm' : 'border-slate-100 bg-slate-50 hover:border-slate-200'}`} style={template === t ? { borderColor: activeTheme.main, color: activeTheme.main } : {}}>
                     <p className={`text-sm font-bold ${template === t ? '' : 'text-slate-600'}`}>{TEMPLATES[t].name}</p>
                     <p className="text-xs text-slate-400 mt-1">{TEMPLATES[t].desc}</p>
                     </div>
                 ))}
                 </div>
+
+                {/* 🌟 電競風專屬：深淺底色切換開關 🌟 */}
+                {template === 'CyberNeon' && (
+                    <div className="mt-3 flex bg-slate-200/50 rounded-lg p-1.5">
+                        <button onClick={() => handleCyberBgToggle('dark')} className={`flex-1 text-xs py-2 rounded-md font-bold transition-all ${cyberBgMode === 'dark' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>深色星空底</button>
+                        <button onClick={() => handleCyberBgToggle('light')} className={`flex-1 text-xs py-2 rounded-md font-bold transition-all ${cyberBgMode === 'light' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>淺色科技底</button>
+                    </div>
+                )}
              </div>
           </section>
 
@@ -871,7 +1022,7 @@ const App = () => {
                         </label>
                     </div>
                     <div className="flex gap-2">
-                        {template === 'TechBright' && (
+                        {(template === 'TechBright' || template === 'CyberNeon') && (
                             <input type="text" value={logoText} onBlur={saveHistorySnapshot} onChange={(e) => setLogoText(e.target.value)} disabled={!showLogo} placeholder="LOGO (預設 BRAND)" className="w-1/3 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none text-xs font-bold bg-slate-50" />
                         )}
                         <input type="text" value={brandText} onBlur={saveHistorySnapshot} onChange={(e) => setBrandText(e.target.value)} disabled={!showLogo} placeholder="徽章內文 (如:官方授權店)" className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none text-xs font-bold bg-slate-50" />
@@ -998,59 +1149,6 @@ const App = () => {
                 </div>
             </div>
           </section>
-
-          {/* 雲端樣板中心 (GAS) */}
-          <section className="bg-slate-800 p-4 rounded-xl shadow-inner text-white relative overflow-hidden border border-slate-700">
-            <div className="absolute top-0 right-0 p-2 opacity-10 pointer-events-none"><Cloud className="w-24 h-24" /></div>
-            <label className="text-sm font-bold mb-3 flex items-center gap-2 text-sky-300">
-              <Cloud className="w-4 h-4" /> 雲端樣板中心 (GAS + Drive)
-            </label>
-            
-            <div className="space-y-3 relative z-10">
-                <div className="flex gap-2">
-                    <div className="flex-1 bg-slate-900/50 rounded flex items-center px-3 border border-slate-600 focus-within:border-sky-400">
-                        <Link2 className="w-4 h-4 text-slate-400 mr-2" />
-                        <input type="text" placeholder="貼上您的 GAS Web App 網址..." value={gasUrl} onChange={(e) => setGasUrl(e.target.value)} className="w-full bg-transparent text-sm py-2.5 outline-none text-slate-300 placeholder-slate-500" />
-                    </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                    <input type="text" placeholder="樣板名稱 (如: 雙11)" value={projectName} onChange={(e) => setProjectName(e.target.value)} className="w-1/2 bg-slate-900/50 text-sm py-2 px-3 rounded border border-slate-600 focus:border-emerald-400 outline-none" />
-                    <button onClick={saveToGAS} disabled={isSaving} className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 text-white text-sm font-bold py-2 px-3 rounded flex items-center justify-center gap-1 transition-colors">
-                        {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                        {isSaving ? '儲存中...' : '儲存樣板'}
-                    </button>
-                    <button onClick={loadFromGAS} disabled={isLoadingList} className="flex-1 bg-sky-600 hover:bg-sky-500 disabled:bg-sky-800 text-white text-sm font-bold py-2 px-3 rounded flex items-center justify-center gap-1 transition-colors">
-                        {isLoadingList ? <Loader2 className="w-4 h-4 animate-spin" /> : <DownloadCloud className="w-4 h-4" />}
-                        載入紀錄
-                    </button>
-                </div>
-                
-                {cloudMessage.text && (
-                    <div className={`text-xs font-bold p-2 rounded text-center ${cloudMessage.type === 'error' ? 'bg-red-500/20 text-red-300 border border-red-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'}`}>
-                        {cloudMessage.text}
-                    </div>
-                )}
-
-                {showLoadMenu && cloudTemplates.length > 0 && (
-                    <div className="mt-2 bg-slate-900 border border-slate-600 rounded p-2 max-h-48 overflow-y-auto">
-                        <div className="flex justify-between items-center mb-2 px-1">
-                            <span className="text-xs text-slate-400 font-bold">選擇要載入的樣板：</span>
-                            <button onClick={()=>setShowLoadMenu(false)} className="text-[10px] text-slate-500 hover:text-white">關閉</button>
-                        </div>
-                        {cloudTemplates.map((t, idx) => (
-                            <div key={idx} onClick={() => applyTemplate(t.parameters)} className="cursor-pointer bg-slate-800 hover:bg-sky-900 border border-slate-700 p-3 rounded mb-2 flex justify-between items-center transition-colors">
-                                <span className="text-sm font-bold text-sky-100">{t.projectName}</span>
-                                <span className="text-xs text-slate-500">{t.timestamp}</span>
-                            </div>
-                        ))}
-                    </div>
-                )}
-                {showLoadMenu && cloudTemplates.length === 0 && (
-                    <div className="mt-2 text-center text-xs text-slate-500 py-3 border border-slate-700 border-dashed rounded">尚無儲存的樣板紀錄</div>
-                )}
-            </div>
-          </section>
         </div>
 
         <div className="absolute bottom-0 w-full p-5 border-t border-slate-100 bg-white/95 backdrop-blur shrink-0 z-20">
@@ -1096,7 +1194,6 @@ const App = () => {
                     <Maximize className="w-6 h-6" />
                     互動式渲染畫布 (1000x1000px)
                 </h2>
-                {/* 🌟 操作秘笈按鈕 🌟 */}
                 <button onClick={() => setShowHelpModal(true)} className="flex items-center gap-1.5 text-sm font-bold bg-white text-slate-600 px-3.5 py-2 rounded-full shadow-sm hover:text-sky-500 hover:shadow transition-all border border-slate-200">
                     <Info className="w-4 h-4" /> 操作秘笈
                 </button>
