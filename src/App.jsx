@@ -16,6 +16,7 @@ const App = () => {
   const [enableRemoveBgApi, setEnableRemoveBgApi] = useState(false);
   const [removeBgApiKey, setRemoveBgApiKey] = useState('');
   const [isRemovingBg, setIsRemovingBg] = useState(false);
+  const [bgRemovalCount, setBgRemovalCount] = useState(0); // 新增：每月去背次數統計
 
   // --- UI 面板拖曳寬度狀態 ---
   const [leftWidth, setLeftWidth] = useState(560); 
@@ -86,7 +87,7 @@ const App = () => {
     None: { name: '純淨白圖', desc: '僅商品與純白背景' }
   };
 
-  // 讀取本機設定 (GAS URL & Remove.bg API Key)
+  // 讀取本機設定 (GAS URL & Remove.bg API Key & 每月去背次數)
   useEffect(() => {
     const savedUrl = localStorage.getItem('ManiFactory_GAS_URL');
     if (savedUrl) setGasUrl(savedUrl);
@@ -95,6 +96,21 @@ const App = () => {
     if (savedBgKey) {
         setRemoveBgApiKey(savedBgKey);
         setEnableRemoveBgApi(true);
+    }
+
+    // --- 檢查與初始化每月去背次數 ---
+    const currentMonth = new Date().toISOString().slice(0, 7); // 格式 "YYYY-MM"
+    const savedMonth = localStorage.getItem('ManiFactory_RemoveBg_Month');
+    const savedCount = parseInt(localStorage.getItem('ManiFactory_RemoveBg_Count') || '0', 10);
+
+    if (savedMonth !== currentMonth) {
+        // 新的一個月，將次數歸零
+        localStorage.setItem('ManiFactory_RemoveBg_Month', currentMonth);
+        localStorage.setItem('ManiFactory_RemoveBg_Count', '0');
+        setBgRemovalCount(0);
+    } else {
+        // 同一個月，載入歷史次數
+        setBgRemovalCount(savedCount);
     }
   }, []);
 
@@ -116,7 +132,7 @@ const App = () => {
   // --- Remove.bg 呼叫邏輯 ---
   const executeRemoveBg = async (base64Img) => {
       if (!removeBgApiKey) {
-          alert('SqdtJZEghDkmhdpBYh8W956c');
+          alert('請先輸入 Remove.bg API Key！');
           return;
       }
       setIsRemovingBg(true);
@@ -145,6 +161,13 @@ const App = () => {
           reader.onloadend = () => {
               setImage(reader.result); // 將畫布顯示圖換成去背後的圖
               setIsRemovingBg(false);
+              
+              // 去背成功，次數 +1 並儲存至 localStorage
+              setBgRemovalCount(prevCount => {
+                  const newCount = prevCount + 1;
+                  localStorage.setItem('ManiFactory_RemoveBg_Count', newCount.toString());
+                  return newCount;
+              });
           };
           reader.readAsDataURL(resultBlob);
       } catch (err) {
@@ -682,7 +705,14 @@ const App = () => {
                             className="w-full text-xs px-2 py-1.5 border border-purple-200 rounded focus:outline-none focus:border-purple-400 bg-white" 
                         />
                     </div>
-                    <p className="text-[10px] text-purple-500 mt-1.5 ml-6">設定後將自動記憶。開啟此功能時，上傳新圖會自動呼叫 API 去背。</p>
+                    
+                    {/* 顯示去背次數追蹤 */}
+                    <div className="flex items-center justify-between mt-2 ml-6">
+                        <p className="text-[10px] text-purple-500">設定後將自動記憶。開啟此功能時，上傳新圖會自動呼叫 API 去背。</p>
+                        <span className="text-[10px] font-bold text-purple-700 bg-purple-200 px-2 py-0.5 rounded-full shadow-sm">
+                            本月已去背: {bgRemovalCount} 次
+                        </span>
+                    </div>
                     
                     {/* 若已有圖片但尚未去背，顯示手動按鈕 */}
                     {rawImage && !isRemovingBg && (
