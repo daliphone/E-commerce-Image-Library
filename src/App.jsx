@@ -1,6 +1,50 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Camera, AlertTriangle, CheckCircle, Settings, Download, Layout, Type, ShieldCheck, Info, Image as ImageIcon, Sliders, Palette, Maximize, Box, Move, Type as TypeIcon, ImagePlus, RotateCcw, Cloud, Save, DownloadCloud, Loader2, Link2, GripVertical, Wand2, Key, Layers, Undo2, Redo2, Lock, Unlock, MousePointer2, X, ArrowLeft } from 'lucide-react';
 
+// --- IndexedDB 本地草稿儲存系統 ---
+const DB_NAME = 'ManiFactoryDB';
+const STORE_NAME = 'drafts';
+const DRAFT_KEY = 'current_draft';
+
+const initDB = () => {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, 1);
+        request.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains(STORE_NAME)) {
+                db.createObjectStore(STORE_NAME);
+            }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+};
+
+const saveDraft = async (state) => {
+    try {
+        const db = await initDB();
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        tx.objectStore(STORE_NAME).put(state, DRAFT_KEY);
+    } catch (e) {
+        console.error("Draft save failed", e);
+    }
+};
+
+const loadDraft = async () => {
+    try {
+        const db = await initDB();
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const request = tx.objectStore(STORE_NAME).get(DRAFT_KEY);
+        return new Promise((resolve) => {
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => resolve(null);
+        });
+    } catch (e) {
+        console.error("Draft load failed", e);
+        return null;
+    }
+};
+
 const App = () => {
   // --- 核心狀態 (升級為支援多圖片陣列) ---
   const [products, setProducts] = useState([]); // { id, src, rawSrc, offset: {x,y}, scale, rotation, shadow, isRemovingBg }
@@ -48,6 +92,7 @@ const App = () => {
   const [titleFont, setTitleFont] = useState('Microsoft JhengHei');
   const [tagFont, setTagFont] = useState('Microsoft JhengHei');
 
+  const [productScale, setProductScale] = useState(100); // 恢復全域商品縮放狀態
   const [brandScale, setBrandScale] = useState(100);
   const [textScale, setTextScale] = useState(100);
   const [tagScale, setTagScale] = useState(100);   
@@ -70,6 +115,7 @@ const App = () => {
   const [rotations, setRotations] = useState({ title: 0, icon: 0, deco: 0 });
   const [guideLines, setGuideLines] = useState({ x: null, y: null, active: false });
   const [showHelpModal, setShowHelpModal] = useState(false); 
+  const [isDraftLoaded, setIsDraftLoaded] = useState(false); // 新增：草稿載入狀態
   
   const historyRef = useRef([]);
   const historyIndex = useRef(-1);
@@ -100,7 +146,7 @@ const App = () => {
   const saveHistorySnapshot = () => {
     const stateSnapshot = { 
         products, titleOffset, iconOffset, tagOffsets, decoOffsets, rotations, 
-        brandScale, textScale, tagScale, iconScale, 
+        productScale, brandScale, textScale, tagScale, iconScale, 
         primaryColor, accentColor, textColor, cyberBgMode,
         layerOrder, tagCustomColors, subTitleText
     };
@@ -127,6 +173,7 @@ const App = () => {
   const applyHistoryState = (state) => {
     setTitleOffset(state.titleOffset); setIconOffset(state.iconOffset);
     setTagOffsets(state.tagOffsets); setDecoOffsets(state.decoOffsets); setRotations(state.rotations);
+    setProductScale(state.productScale || 100);
     setBrandScale(state.brandScale); setTextScale(state.textScale);
     setTagScale(state.tagScale); setIconScale(state.iconScale);
     setCyberBgMode(state.cyberBgMode || 'dark');
@@ -138,7 +185,6 @@ const App = () => {
     setTagCustomColors(state.tagCustomColors || {});
     setSubTitleText(state.subTitleText || '嚴選推薦');
 
-    // 處理新版 products 或相容舊版單圖結構
     if (state.products) {
         setProducts(state.products);
     } else if (state.imageBase64 || state.rawImage || state.productOffset) {
@@ -160,6 +206,82 @@ const App = () => {
         setProducts([]);
     }
   };
+
+  // --- 🌟 IndexedDB 本地草稿還原與自動儲存 ---
+  const applyDraftState = (draft) => {
+      if (draft.products) setProducts(draft.products);
+      if (draft.iconImage !== undefined) setIconImage(draft.iconImage);
+      if (draft.platform) setPlatform(draft.platform);
+      if (draft.template) setTemplate(draft.template);
+      if (draft.removeBg !== undefined) setRemoveBg(draft.removeBg);
+      if (draft.cyberBgMode) setCyberBgMode(draft.cyberBgMode);
+      if (draft.primaryColor) setPrimaryColor(draft.primaryColor);
+      if (draft.accentColor) setAccentColor(draft.accentColor);
+      if (draft.textColor) setTextColor(draft.textColor);
+      if (draft.logoText !== undefined) setLogoText(draft.logoText);
+      if (draft.brandText !== undefined) setBrandText(draft.brandText);
+      if (draft.promoText !== undefined) setPromoText(draft.promoText);
+      if (draft.subTitleText !== undefined) setSubTitleText(draft.subTitleText);
+      if (draft.tagsInput !== undefined) setTagsInput(draft.tagsInput);
+      if (draft.isAiDisclosure !== undefined) setIsAiDisclosure(draft.isAiDisclosure);
+      if (draft.tagShape) setTagShape(draft.tagShape);
+      if (draft.showLogo !== undefined) setShowLogo(draft.showLogo);
+      if (draft.showTitle !== undefined) setShowTitle(draft.showTitle);
+      if (draft.showTags !== undefined) setShowTags(draft.showTags);
+      if (draft.titleFont) setTitleFont(draft.titleFont);
+      if (draft.tagFont) setTagFont(draft.tagFont);
+      if (draft.productScale) setProductScale(draft.productScale);
+      if (draft.brandScale) setBrandScale(draft.brandScale);
+      if (draft.textScale) setTextScale(draft.textScale);
+      if (draft.tagScale) setTagScale(draft.tagScale);
+      if (draft.iconScale) setIconScale(draft.iconScale);
+      if (draft.titleOffset) setTitleOffset(draft.titleOffset);
+      if (draft.iconOffset) setIconOffset(draft.iconOffset);
+      if (draft.tagOffsets) setTagOffsets(draft.tagOffsets);
+      if (draft.decoOffsets) setDecoOffsets(draft.decoOffsets);
+      if (draft.layerOrder) setLayerOrder(draft.layerOrder);
+      if (draft.tagCustomColors) setTagCustomColors(draft.tagCustomColors);
+      if (draft.rotations) setRotations(draft.rotations);
+  };
+
+  useEffect(() => {
+      const initDraft = async () => {
+          const draft = await loadDraft();
+          if (draft) {
+              applyDraftState(draft);
+              setCloudMessage({ text: '✅ 已為您自動還原未完成的草稿！', type: 'success' });
+              setTimeout(() => setCloudMessage({ text: '', type: '' }), 4000);
+              setTimeout(() => saveHistorySnapshot(), 100); // 確保還原後可重做
+          }
+          setIsDraftLoaded(true);
+      };
+      initDraft();
+  }, []);
+
+  useEffect(() => {
+      if (!isDraftLoaded) return;
+      const timer = setTimeout(() => {
+          const stateToSave = {
+              products, iconImage, platform, template, removeBg, cyberBgMode,
+              primaryColor, accentColor, textColor, logoText, brandText,
+              promoText, subTitleText, tagsInput, isAiDisclosure, tagShape,
+              showLogo, showTitle, showTags, titleFont, tagFont,
+              productScale, brandScale, textScale, tagScale, iconScale,
+              titleOffset, iconOffset, tagOffsets, decoOffsets, layerOrder,
+              tagCustomColors, rotations
+          };
+          saveDraft(stateToSave);
+      }, 1000); // 停止動作 1 秒後自動寫入本地資料庫
+      return () => clearTimeout(timer);
+  }, [
+      isDraftLoaded, products, iconImage, platform, template, removeBg, cyberBgMode,
+      primaryColor, accentColor, textColor, logoText, brandText,
+      promoText, subTitleText, tagsInput, isAiDisclosure, tagShape,
+      showLogo, showTitle, showTags, titleFont, tagFont,
+      productScale, brandScale, textScale, tagScale, iconScale,
+      titleOffset, iconOffset, tagOffsets, decoOffsets, layerOrder,
+      tagCustomColors, rotations
+  ]);
 
   useEffect(() => { if (historyRef.current.length === 0) saveHistorySnapshot(); }, []);
 
@@ -280,7 +402,6 @@ const App = () => {
     return { safe: detected.length === 0, words: detected };
   };
 
-  // --- Remove.bg 單圖去背呼叫 ---
   const executeRemoveBg = async (prodId, base64Img) => {
       if (!removeBgApiKey) { alert('請先輸入 Remove.bg API Key！'); return; }
       
@@ -315,7 +436,6 @@ const App = () => {
       localStorage.setItem('ManiFactory_RemoveBg_Key', val);
   };
 
-  // 支援多選上傳
   const processUpload = (files) => {
       Array.from(files).forEach((file, idx) => {
           if (file && file.type.startsWith('image/')) {
@@ -323,7 +443,7 @@ const App = () => {
             reader.onload = (f) => { 
                 const result = f.target.result; 
                 const newId = 'prod_' + Date.now() + '_' + idx + Math.floor(Math.random()*1000);
-                const newProd = { id: newId, src: result, rawSrc: result, offset: {x:0, y:0}, scale: 100, rotation: 0, shadow: true, isRemovingBg: false };
+                const newProd = { id: newId, src: result, rawSrc: result, offset: {x:0, y:0}, scale: productScale, rotation: 0, shadow: true, isRemovingBg: false };
                 
                 setProducts(prev => [...prev, newProd]);
                 setLayerOrder(prev => {
@@ -375,16 +495,15 @@ const App = () => {
     localStorage.setItem('ManiFactory_GAS_URL', gasUrl);
     setIsSaving(true); setCloudMessage({ text: '正在上傳參數至 Google Drive...', type: 'info' });
 
-    // 為避免超過 Google Sheets 儲存上限，預設只送出第一張主圖至 GAS 以產生存檔網址，其餘保留參數但不傳 Base64
     const payload = {
       projectName, platform, template, removeBg, primaryColor, accentColor, textColor,
       logoText, brandText, promoText, subTitleText, tagsInput, isAiDisclosure, tagShape, showLogo, showTitle, showTags,
-      titleFont, tagFont, brandScale, textScale, tagScale, iconScale, 
+      titleFont, tagFont, productScale, brandScale, textScale, tagScale, iconScale, 
       titleOffset, iconOffset, tagOffsets, decoOffsets, rotations, cyberBgMode,
       layerOrder, tagCustomColors,
       imageBase64: products.length > 0 ? products[0].src : null, 
       iconImageBase64: iconImage,
-      products: products.map((p, idx) => ({ ...p, src: idx === 0 ? '' : null, rawSrc: null })) // 移除巨大 Base64 字串
+      products: products.map((p, idx) => ({ ...p, src: idx === 0 ? '' : null, rawSrc: null })) 
     };
 
     try {
@@ -417,19 +536,18 @@ const App = () => {
     setTagsInput(params.tagsInput); setIsAiDisclosure(params.isAiDisclosure); setTagShape(params.tagShape); 
     setShowLogo(params.showLogo); setShowTitle(params.showTitle); setShowTags(params.showTags); 
     setTitleFont(params.titleFont); setTagFont(params.tagFont); 
+    setProductScale(params.productScale || 100);
     setBrandScale(params.brandScale || 100); 
     setTextScale(params.textScale); setTagScale(params.tagScale); setIconScale(params.iconScale); 
     setTitleOffset(params.titleOffset); setIconOffset(params.iconOffset); setTagOffsets(params.tagOffsets);
     setDecoOffsets(params.decoOffsets || { frame: { x: 0, y: 0 }, bars: { x: 0, y: 0 }, poly: { x: 0, y: 0 }, cyber: {x:0, y:0}, premium: {x:0, y:0} });
-    setRotations(params.rotations || { product: 0, title: 0, icon: 0, deco: 0 });
+    setRotations(params.rotations || { title: 0, icon: 0, deco: 0 });
     setCyberBgMode(params.cyberBgMode || 'dark');
     setTagCustomColors(params.tagCustomColors || {});
 
-    // 還原多圖商品參數，或是相容舊版單圖
     let loadedLayerOrder = params.layerOrder || ['deco', 'tags', 'title', 'icon'];
     
     if (params.products && params.products.length > 0) {
-        // 將雲端保存的主圖網址塞回第一個 product 中
         const loadedProducts = [...params.products];
         if (params.savedMainImageUrl) {
             loadedProducts[0].src = params.savedMainImageUrl;
@@ -480,7 +598,6 @@ const App = () => {
     const boxes = hitBoxes.current;
     let clickedSomething = false;
 
-    // 若嚴格規範平台，僅允許點擊商品圖層
     if (!activeTheme.allowText) {
         const reversedOrder = [...layerOrder].reverse();
         for (const layer of reversedOrder) {
@@ -616,7 +733,6 @@ const App = () => {
       setProducts(prev => prev.map(p => ({...p, offset: {x:0, y:0}, rotation: 0}))); 
       setDecoOffsets({ frame: {x:0, y:0}, bars: {x:0, y:0}, poly: {x:0, y:0}, cyber: {x:0, y:0}, premium: {x:0, y:0} });
       setRotations({ title: 0, icon: 0, deco: 0 });
-      // 將所有圖層按預設順序排列，商品圖維持先來後到疊加
       const prodIds = products.map(p => p.id);
       setLayerOrder(['deco', ...prodIds, 'tags', 'title', 'icon']);
       setTimeout(() => saveHistorySnapshot(), 50);
@@ -627,7 +743,6 @@ const App = () => {
       if (activeLayer?.id === layerId || activeLayer?.type === layerId) setActiveLayer(null); 
   };
 
-  // --- 畫布繪製邏輯 ---
   useEffect(() => {
     if (!canvasRef.current) return;
     const canvas = canvasRef.current;
@@ -667,7 +782,6 @@ const App = () => {
         const isMomoOrYahooMall = !THEMES[platform].allowText;
         const currentTemplate = isMomoOrYahooMall ? 'None' : template;
 
-        // 🎨 背景層填充
         if (currentTemplate === 'CyberNeon') {
             ctx.fillStyle = cyberBgMode === 'dark' ? '#0f172a' : '#f0f4f8'; 
         } else if (currentTemplate === 'PremiumGold') {
@@ -677,7 +791,6 @@ const App = () => {
         }
         ctx.fillRect(0, 0, width, height);
 
-        // 預先載入所有需要的圖片
         const iImg = iconImage ? await loadImg(iconImage) : null;
         const loadedProds = {};
         for (const p of products) { loadedProds[p.id] = p.src ? await loadImg(p.src) : null; }
@@ -750,7 +863,7 @@ const App = () => {
             let baseScale = 0.75; let baseYOffset = showTitle ? 20 : 0;
             if (currentTemplate === 'TechBright' || currentTemplate === 'CyberNeon') { baseScale = 0.65; baseYOffset = showTitle ? -20 : 0; }
 
-            const finalScale = baseScale * (prod.scale / 100);
+            const finalScale = baseScale * ((prod.scale || 100) / 100);
             const pImg = loadedProds[prod.id];
             const w = width * finalScale;
             const h = (pImg && pImg.width) ? ((pImg.height / pImg.width) * w) : w;
@@ -841,7 +954,7 @@ const App = () => {
                     ctx.font = `bold ${subFontSize}px "${titleFont}"`;
                     const subW = ctx.measureText(subTitleText).width;
 
-                    const blockW = subW + (40 * actualTextScale); // 讓副標題底色塊跟著文字寬度與縮放比例改變
+                    const blockW = subW + (40 * actualTextScale); 
                     const blockH = 45 * actualTextScale;
                     const gap = 15 * actualTextScale;
                     
@@ -966,11 +1079,11 @@ const App = () => {
         };
 
         const drawIconLayer = () => {
-            if (iImg) {
-                const iW = width * (iconScale / 100); const iH = (iImg.height / iImg.width) * iW;
+            if (iconImage) {
+                const iW = width * (iconScale / 100); const iH = (iconImage.height / iconImage.width) * iW;
                 const ix = (width / 2) - (iW / 2) + iconOffset.x; const iy = (height / 2) - (iH / 2) + iconOffset.y;
                 drawWithRotation(ctx, ix, iy, iW, iH, rotations.icon, (c, dx, dy, dw, dh) => {
-                    c.drawImage(iImg, dx, dy, dw, dh);
+                    c.drawImage(iconImage, dx, dy, dw, dh);
                 }, 'icon');
                 hitBoxes.current.icon = { x: ix, y: iy, w: iW, h: iH };
             }
@@ -1083,7 +1196,7 @@ const App = () => {
                             return (
                                 <>
                                     <div>
-                                        <label className="text-xs font-bold text-slate-500 flex items-center gap-1 mb-2"><Camera className="w-3 h-3" /> 商品主體縮放 ({prod.scale}%)</label>
+                                        <label className="text-xs font-bold text-slate-500 flex items-center gap-1 mb-2"><Camera className="w-3 h-3" /> 此商品圖層縮放 ({prod.scale}%)</label>
                                         <input type="range" value={prod.scale} onChange={(e) => setProducts(prev => prev.map(p => p.id === prod.id ? {...p, scale: parseInt(e.target.value)} : p))} onMouseUp={saveHistorySnapshot} min="10" max="250" className="w-full accent-slate-400" />
                                     </div>
                                     <div className="p-3 bg-slate-50 rounded border border-slate-100 flex items-center gap-2">
@@ -1328,11 +1441,79 @@ const App = () => {
              </div>
           </section>
 
-          {/* 文案設定 */}
+          {/* 顏色與大小微調 (全域) */}
+          <section className={!activeTheme.allowText ? 'opacity-30 pointer-events-none' : ''}>
+            <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-bold flex items-center gap-2 text-slate-700">
+                <Palette className="w-4 h-4" style={{ color: activeTheme.main }} /> 4. 顏色與全域大小微調
+                </label>
+                <button onClick={resetPositions} className="text-xs flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded font-bold transition-colors">
+                    <RotateCcw className="w-3 h-3" /> 重置所有座標與旋轉
+                </button>
+            </div>
+            
+            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-6">
+                <div className="grid grid-cols-3 gap-4">
+                    <div className="flex flex-col items-center">
+                        <input type="color" value={primaryColor} onBlur={saveHistorySnapshot} onChange={(e) => setPrimaryColor(e.target.value)} className="w-12 h-12 rounded-full cursor-pointer border-4 border-slate-100 p-0 shadow-sm" />
+                        <span className="text-xs text-slate-500 mt-2 font-bold">主色調</span>
+                    </div>
+                    <div className="flex flex-col items-center">
+                        <input type="color" value={accentColor} onBlur={saveHistorySnapshot} onChange={(e) => setAccentColor(e.target.value)} className="w-12 h-12 rounded-full cursor-pointer border-4 border-slate-100 p-0 shadow-sm" />
+                        <span className="text-xs text-slate-500 mt-2 font-bold">重點色</span>
+                    </div>
+                    <div className="flex flex-col items-center">
+                        <input type="color" value={textColor} onBlur={saveHistorySnapshot} onChange={(e) => setTextColor(e.target.value)} className="w-12 h-12 rounded-full cursor-pointer border-4 border-slate-100 p-0 shadow-sm" />
+                        <span className="text-xs text-slate-500 mt-2 font-bold">文字色</span>
+                    </div>
+                </div>
+
+                <hr className="border-slate-100" />
+
+                <div className="space-y-4">
+                    <div className="bg-slate-50 p-4 rounded-lg border border-slate-100">
+                        <div className="flex justify-between items-center mb-3">
+                            <p className="text-xs font-black text-slate-600 flex items-center gap-1"><Camera className="w-4 h-4"/> 全域商品主體縮放 ({productScale}%)</p>
+                        </div>
+                        <input type="range" min="50" max="150" value={productScale} onMouseUp={saveHistorySnapshot} onChange={(e) => {
+                            const newScale = parseInt(e.target.value);
+                            setProductScale(newScale);
+                            setProducts(prev => prev.map(p => ({...p, scale: newScale})));
+                        }} className="w-full accent-slate-400" />
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-3">
+                        <div className={`bg-slate-50 p-3 rounded-lg border border-slate-100 flex flex-col justify-center ${!showLogo && 'opacity-40'}`}>
+                            <p className="text-[10px] font-black text-slate-600 mb-2 flex items-center gap-1"><ShieldCheck className="w-3 h-3"/> 徽章 ({brandScale}%)</p>
+                            <input type="range" min="50" max="150" value={brandScale} onMouseUp={saveHistorySnapshot} onChange={(e) => setBrandScale(e.target.value)} disabled={!showLogo} className="w-full accent-slate-400" />
+                        </div>
+                        <div className={`bg-slate-50 p-3 rounded-lg border border-slate-100 flex flex-col justify-center ${!showTitle && 'opacity-40'}`}>
+                            <p className="text-[10px] font-black text-slate-600 mb-2 flex items-center gap-1"><TypeIcon className="w-3 h-3"/> 標題 ({textScale}%)</p>
+                            <input type="range" min="50" max="150" value={textScale} onMouseUp={saveHistorySnapshot} onChange={(e) => setTextScale(e.target.value)} disabled={!showTitle} className="w-full accent-slate-400" />
+                        </div>
+                        <div className={`bg-slate-50 p-3 rounded-lg border border-slate-100 flex flex-col justify-center ${!showTags && 'opacity-40'}`}>
+                            <p className="text-[10px] font-black text-slate-600 mb-2 flex items-center gap-1"><Box className="w-3 h-3"/> 標籤 ({tagScale}%)</p>
+                            <input type="range" min="50" max="150" value={tagScale} onMouseUp={saveHistorySnapshot} onChange={(e) => setTagScale(e.target.value)} disabled={!showTags} className="w-full accent-slate-400" />
+                        </div>
+                    </div>
+
+                    <div className={`bg-slate-50 p-4 rounded-lg border border-slate-100 ${!showTags && 'opacity-40'}`}>
+                        <span className="text-xs font-bold text-slate-500 block mb-2">標籤外觀形狀</span>
+                        <div className="flex bg-slate-200/50 rounded-lg p-1.5">
+                            <button onClick={()=>{setTagShape('pill'); saveHistorySnapshot();}} className={`flex-1 text-xs py-2 rounded-md font-bold transition-all ${tagShape==='pill' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>圓角滿版</button>
+                            <button onClick={()=>{setTagShape('rect'); saveHistorySnapshot();}} className={`flex-1 text-xs py-2 rounded-md font-bold transition-all ${tagShape==='rect' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>微圓角塊</button>
+                            <button onClick={()=>{setTagShape('outline'); saveHistorySnapshot();}} className={`flex-1 text-xs py-2 rounded-md font-bold transition-all ${tagShape==='outline' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>清透線框</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+          </section>
+
+          {/* 全局文案設定 */}
           <section className={!activeTheme.allowText ? 'opacity-30 pointer-events-none' : ''}>
             <div className="flex justify-between items-center mb-2">
                 <label className="block text-sm font-bold flex items-center gap-2 text-slate-700">
-                    <Type className="w-4 h-4" style={{ color: activeTheme.main }} /> 4. 全局文案設定
+                    <Type className="w-4 h-4" style={{ color: activeTheme.main }} /> 5. 全局文案設定
                 </label>
             </div>
             
@@ -1389,7 +1570,7 @@ const App = () => {
           <section className={!activeTheme.allowText ? 'opacity-30 pointer-events-none' : ''}>
             <div className="flex justify-between items-center mb-2">
                 <label className="block text-sm font-bold flex items-center gap-2 text-slate-700">
-                  <ImagePlus className="w-4 h-4" style={{ color: activeTheme.main }} /> 5. 外部圖示
+                  <ImagePlus className="w-4 h-4" style={{ color: activeTheme.main }} /> 6. 外部圖示
                 </label>
             </div>
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
@@ -1403,6 +1584,7 @@ const App = () => {
             </div>
           </section>
 
+          {/* 雲端中心 */}
           <section className="bg-slate-800 p-4 rounded-xl shadow-inner text-white relative overflow-hidden border border-slate-700 mt-8">
             <div className="absolute top-0 right-0 p-2 opacity-10 pointer-events-none"><Cloud className="w-24 h-24" /></div>
             <label className="text-sm font-bold mb-3 flex items-center gap-2 text-sky-300">
