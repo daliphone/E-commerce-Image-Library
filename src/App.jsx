@@ -46,14 +46,14 @@ const loadDraft = async () => {
 };
 
 const App = () => {
-  // --- 核心狀態 (升級為支援多圖片陣列) ---
-  const [products, setProducts] = useState([]); // { id, src, rawSrc, offset: {x,y}, scale, rotation, shadow, isRemovingBg }
+  // --- 核心狀態 ---
+  const [products, setProducts] = useState([]); 
   const [iconImage, setIconImage] = useState(null);
   const [platform, setPlatform] = useState('Shopee');
   const [template, setTemplate] = useState('LightSoft');
   
   // 視覺效果狀態
-  const [removeBg, setRemoveBg] = useState(true); // 全域光影開關
+  const [removeBg, setRemoveBg] = useState(true); 
   const [cyberBgMode, setCyberBgMode] = useState('dark'); 
 
   // --- Remove.bg API ---
@@ -92,7 +92,7 @@ const App = () => {
   const [titleFont, setTitleFont] = useState('Microsoft JhengHei');
   const [tagFont, setTagFont] = useState('Microsoft JhengHei');
 
-  const [productScale, setProductScale] = useState(100); // 恢復全域商品縮放狀態
+  const [productScale, setProductScale] = useState(100); 
   const [brandScale, setBrandScale] = useState(100);
   const [textScale, setTextScale] = useState(100);
   const [tagScale, setTagScale] = useState(100);   
@@ -104,18 +104,19 @@ const App = () => {
   const [tagOffsets, setTagOffsets] = useState([]);
   const [decoOffsets, setDecoOffsets] = useState({ frame: { x: 0, y: 0 }, bars: { x: 0, y: 0 }, poly: { x: 0, y: 0 }, cyber: { x: 0, y: 0 }, premium: { x: 0, y: 0 } });
   
-  // 動態 Z-Index 圖層排序 (支援商品陣列 ID)
   const [layerOrder, setLayerOrder] = useState(['deco', 'tags', 'title', 'icon']);
-  
-  // 特點標籤獨立換色字典
   const [tagCustomColors, setTagCustomColors] = useState({});
-
   const [lockedLayers, setLockedLayers] = useState({ deco: false, title: false, icon: false });
-  const [activeLayer, setActiveLayer] = useState(null); 
   const [rotations, setRotations] = useState({ title: 0, icon: 0, deco: 0 });
+
+  // 🌟 多選機制狀態 (Multi-Select) 🌟
+  const [selectedLayers, setSelectedLayers] = useState([]); // Array of { type, id, index, key }
+  const activeLayer = selectedLayers.length === 1 ? selectedLayers[0] : null; // 單選相容
+  const isMultiSelect = selectedLayers.length > 1;
+
   const [guideLines, setGuideLines] = useState({ x: null, y: null, active: false });
   const [showHelpModal, setShowHelpModal] = useState(false); 
-  const [isDraftLoaded, setIsDraftLoaded] = useState(false); // 新增：草稿載入狀態
+  const [isDraftLoaded, setIsDraftLoaded] = useState(false); 
   
   const historyRef = useRef([]);
   const historyIndex = useRef(-1);
@@ -130,7 +131,7 @@ const App = () => {
 
   const canvasRef = useRef(null);
   const hitBoxes = useRef({ products: {}, title: null, icon: null, tags: [], deco: null });
-  const dragInfo = useRef({ isDragging: false, target: null, startX: 0, startY: 0, initialOffset: {x:0, y:0} });
+  const dragInfo = useRef({ isDragging: false, targets: [], startX: 0, startY: 0, initialOffsets: [] });
 
   const BANNED_WORDS = ['第一', '最強', '最優', '療效', '根治', '殺頭價', '保證見效'];
 
@@ -142,6 +143,16 @@ const App = () => {
     PremiumGold: { name: '奢華質感風', desc: '極簡莫蘭迪底+優雅雙框' },
     None: { name: '純淨白圖', desc: '僅商品與純白背景' }
   };
+
+  // --- 多選比對輔助函式 ---
+  const isSameLayer = (l1, l2) => {
+      if (l1.type !== l2.type) return false;
+      if (l1.type === 'product') return l1.id === l2.id;
+      if (l1.type === 'tag') return l1.index === l2.index;
+      if (l1.type === 'deco') return l1.key === l2.key;
+      return true; // title, icon
+  };
+  const isLayerSelected = (layer) => selectedLayers.some(l => isSameLayer(l, layer));
 
   const saveHistorySnapshot = () => {
     const stateSnapshot = { 
@@ -184,6 +195,7 @@ const App = () => {
     setLayerOrder(state.layerOrder || ['deco', 'tags', 'title', 'icon']);
     setTagCustomColors(state.tagCustomColors || {});
     setSubTitleText(state.subTitleText || '嚴選推薦');
+    setSelectedLayers([]); // 復原時取消選取避免報錯
 
     if (state.products) {
         setProducts(state.products);
@@ -207,7 +219,6 @@ const App = () => {
     }
   };
 
-  // --- 🌟 IndexedDB 本地草稿還原與自動儲存 ---
   const applyDraftState = (draft) => {
       if (draft.products) setProducts(draft.products);
       if (draft.iconImage !== undefined) setIconImage(draft.iconImage);
@@ -251,7 +262,7 @@ const App = () => {
               applyDraftState(draft);
               setCloudMessage({ text: '✅ 已為您自動還原未完成的草稿！', type: 'success' });
               setTimeout(() => setCloudMessage({ text: '', type: '' }), 4000);
-              setTimeout(() => saveHistorySnapshot(), 100); // 確保還原後可重做
+              setTimeout(() => saveHistorySnapshot(), 100); 
           }
           setIsDraftLoaded(true);
       };
@@ -271,7 +282,7 @@ const App = () => {
               tagCustomColors, rotations
           };
           saveDraft(stateToSave);
-      }, 1000); // 停止動作 1 秒後自動寫入本地資料庫
+      }, 1000); 
       return () => clearTimeout(timer);
   }, [
       isDraftLoaded, products, iconImage, platform, template, removeBg, cyberBgMode,
@@ -334,6 +345,7 @@ const App = () => {
       setTimeout(saveHistorySnapshot, 50);
   };
 
+  // 🌟 鍵盤多選移動支援 🌟
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
@@ -341,7 +353,7 @@ const App = () => {
           if (e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? handleRedo() : handleUndo(); return; }
           if (e.key.toLowerCase() === 'y') { e.preventDefault(); handleRedo(); return; }
       }
-      if (activeLayer) {
+      if (selectedLayers.length > 0) {
           const step = e.shiftKey ? 10 : 1;
           let dx = 0, dy = 0;
           if (e.key === 'ArrowUp') dy = -step;
@@ -351,25 +363,31 @@ const App = () => {
 
           if (dx !== 0 || dy !== 0) {
               e.preventDefault();
-              if (activeLayer.type === 'product') {
-                  setProducts(prev => prev.map(p => p.id === activeLayer.id ? { ...p, offset: { x: p.offset.x + dx, y: p.offset.y + dy } } : p));
+              setProducts(prev => prev.map(p => selectedLayers.some(l => l.type === 'product' && l.id === p.id) ? { ...p, offset: { x: p.offset.x + dx, y: p.offset.y + dy } } : p));
+              if (selectedLayers.some(l => l.type === 'title')) setTitleOffset(p => ({ x: p.x + dx, y: p.y + dy }));
+              if (selectedLayers.some(l => l.type === 'icon')) setIconOffset(p => ({ x: p.x + dx, y: p.y + dy }));
+              if (selectedLayers.some(l => l.type === 'tag')) {
+                  setTagOffsets(p => p.map((off, i) => selectedLayers.some(l => l.type === 'tag' && l.index === i) ? { x: off.x + dx, y: off.y + dy } : off));
               }
-              else if (activeLayer.type === 'title') setTitleOffset(p => ({ x: p.x + dx, y: p.y + dy }));
-              else if (activeLayer.type === 'icon') setIconOffset(p => ({ x: p.x + dx, y: p.y + dy }));
-              else if (activeLayer.type === 'tag') setTagOffsets(p => { const next = [...p]; next[activeLayer.index] = { x: p[activeLayer.index].x + dx, y: p[activeLayer.index].y + dy }; return next; });
-              else if (activeLayer.type === 'deco') setDecoOffsets(p => ({ ...p, [activeLayer.key]: { x: p[activeLayer.key].x + dx, y: p[activeLayer.key].y + dy } }));
+              if (selectedLayers.some(l => l.type === 'deco')) {
+                  setDecoOffsets(p => {
+                      const next = {...p};
+                      selectedLayers.filter(l => l.type === 'deco').forEach(l => { next[l.key] = { x: p[l.key].x + dx, y: p[l.key].y + dy }; });
+                      return next;
+                  });
+              }
           }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeLayer]);
+  }, [selectedLayers]);
 
   useEffect(() => {
-    const handleKeyUp = (e) => { if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) && activeLayer) saveHistorySnapshot(); };
+    const handleKeyUp = (e) => { if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) && selectedLayers.length > 0) saveHistorySnapshot(); };
     window.addEventListener('keyup', handleKeyUp);
     return () => window.removeEventListener('keyup', handleKeyUp);
-  }, [activeLayer, products, titleOffset, iconOffset, tagOffsets, decoOffsets]);
+  }, [selectedLayers, products, titleOffset, iconOffset, tagOffsets, decoOffsets]);
 
   useEffect(() => {
     const savedUrl = localStorage.getItem('ManiFactory_GAS_URL');
@@ -404,9 +422,7 @@ const App = () => {
 
   const executeRemoveBg = async (prodId, base64Img) => {
       if (!removeBgApiKey) { alert('請先輸入 Remove.bg API Key！'); return; }
-      
       setProducts(prev => prev.map(p => p.id === prodId ? { ...p, isRemovingBg: true } : p));
-      
       try {
           const res = await fetch(base64Img);
           const blob = await res.blob();
@@ -593,65 +609,83 @@ const App = () => {
       return box && x >= box.x && x <= box.x + box.w && y >= box.y && y <= box.y + box.h;
   };
 
+  // --- 🌟 支援多選的滑鼠點擊 ---
   const handleMouseDown = (e) => {
     const { x, y } = getMousePos(e);
     const boxes = hitBoxes.current;
-    let clickedSomething = false;
+    let hitLayer = null;
 
     if (!activeTheme.allowText) {
         const reversedOrder = [...layerOrder].reverse();
         for (const layer of reversedOrder) {
             if (layer.startsWith('prod_')) {
-                const prodBox = boxes.products[layer];
-                if (!lockedLayers[layer] && checkHit(x, y, prodBox)) {
-                    const prod = products.find(p => p.id === layer);
-                    dragInfo.current = { isDragging: true, target: { type: 'product', id: layer }, startX: x, startY: y, initialOffset: prod.offset };
-                    setActiveLayer({ type: 'product', id: layer }); return;
+                if (!lockedLayers[layer] && checkHit(x, y, boxes.products[layer])) {
+                    hitLayer = { type: 'product', id: layer }; break;
                 }
             }
         }
-        setActiveLayer(null); return; 
-    }
-
-    const reversedOrder = [...layerOrder].reverse();
-    
-    for (const layer of reversedOrder) {
-        if (layer === 'icon' && !lockedLayers.icon && iconImage && checkHit(x, y, boxes.icon)) {
-            dragInfo.current = { isDragging: true, target: { type: 'icon' }, startX: x, startY: y, initialOffset: iconOffset }; 
-            setActiveLayer({ type: 'icon' }); clickedSomething = true; break;
-        }
-        if (layer === 'title' && !lockedLayers.title && showTitle && checkHit(x, y, boxes.title)) {
-            dragInfo.current = { isDragging: true, target: { type: 'title' }, startX: x, startY: y, initialOffset: titleOffset }; 
-            setActiveLayer({ type: 'title' }); clickedSomething = true; break;
-        }
-        if (layer === 'tags' && showTags) {
-            let hitTag = false;
-            for (let i = boxes.tags.length - 1; i >= 0; i--) {
-                if (checkHit(x, y, boxes.tags[i])) {
-                    dragInfo.current = { isDragging: true, target: { type: 'tag', index: i }, startX: x, startY: y, initialOffset: tagOffsets[i] || {x:0, y:0} }; 
-                    setActiveLayer({ type: 'tag', index: i }); clickedSomething = true; hitTag = true; break;
+    } else {
+        const reversedOrder = [...layerOrder].reverse();
+        for (const layer of reversedOrder) {
+            if (layer === 'icon' && !lockedLayers.icon && iconImage && checkHit(x, y, boxes.icon)) {
+                hitLayer = { type: 'icon' }; break;
+            }
+            if (layer === 'title' && !lockedLayers.title && showTitle && checkHit(x, y, boxes.title)) {
+                hitLayer = { type: 'title' }; break;
+            }
+            if (layer === 'tags' && showTags) {
+                let hitTag = false;
+                for (let i = boxes.tags.length - 1; i >= 0; i--) {
+                    if (checkHit(x, y, boxes.tags[i])) { hitLayer = { type: 'tag', index: i }; hitTag = true; break; }
+                }
+                if (hitTag) break;
+            }
+            if (layer.startsWith('prod_')) {
+                if (!lockedLayers[layer] && checkHit(x, y, boxes.products[layer])) {
+                    hitLayer = { type: 'product', id: layer }; break;
                 }
             }
-            if (hitTag) break;
-        }
-        if (layer.startsWith('prod_')) {
-            const prodBox = boxes.products[layer];
-            if (!lockedLayers[layer] && checkHit(x, y, prodBox)) {
-                const prod = products.find(p => p.id === layer);
-                dragInfo.current = { isDragging: true, target: { type: 'product', id: layer }, startX: x, startY: y, initialOffset: prod.offset }; 
-                setActiveLayer({ type: 'product', id: layer }); clickedSomething = true; break;
+            if (layer === 'deco' && !lockedLayers.deco && checkHit(x, y, boxes.deco)) {
+                hitLayer = { type: 'deco', key: boxes.deco.key }; break;
             }
-        }
-        if (layer === 'deco' && !lockedLayers.deco && checkHit(x, y, boxes.deco)) {
-            const key = boxes.deco.key;
-            dragInfo.current = { isDragging: true, target: { type: 'deco', key: key }, startX: x, startY: y, initialOffset: decoOffsets[key] || {x:0, y:0} }; 
-            setActiveLayer({ type: 'deco', key: key }); clickedSomething = true; break;
         }
     }
 
-    if (!clickedSomething) setActiveLayer(null);
+    if (hitLayer) {
+        if (e.shiftKey) {
+            if (isLayerSelected(hitLayer)) {
+                setSelectedLayers(prev => prev.filter(l => !isSameLayer(l, hitLayer)));
+            } else {
+                const newSel = [...selectedLayers, hitLayer];
+                setSelectedLayers(newSel);
+                startDrag(newSel, x, y);
+            }
+        } else {
+            if (!isLayerSelected(hitLayer)) {
+                setSelectedLayers([hitLayer]);
+                startDrag([hitLayer], x, y);
+            } else {
+                startDrag(selectedLayers, x, y);
+            }
+        }
+    } else {
+        setSelectedLayers([]);
+    }
   };
 
+  const startDrag = (layers, startX, startY) => {
+      const initialOffsets = layers.map(l => {
+          if (l.type === 'product') return products.find(p => p.id === l.id)?.offset || {x:0, y:0};
+          if (l.type === 'title') return titleOffset;
+          if (l.type === 'icon') return iconOffset;
+          if (l.type === 'tag') return tagOffsets[l.index] || {x:0, y:0};
+          if (l.type === 'deco') return decoOffsets[l.key] || {x:0, y:0};
+          return {x:0,y:0};
+      });
+      dragInfo.current = { isDragging: true, targets: layers, startX, startY, initialOffsets };
+  };
+
+  // --- 🌟 支援多選的滑鼠拖曳 ---
   const handleMouseMove = (e) => {
     if (!activeTheme.allowText && !dragInfo.current.isDragging) return;
 
@@ -660,28 +694,47 @@ const App = () => {
     if (dragInfo.current.isDragging) {
         const dx = x - dragInfo.current.startX;
         const dy = y - dragInfo.current.startY;
-        const { target, initialOffset } = dragInfo.current;
+        const { targets, initialOffsets } = dragInfo.current;
         
-        let newX = initialOffset.x + dx;
-        let newY = initialOffset.y + dy;
+        let appliedDx = dx;
+        let appliedDy = dy;
+        let isSnapped = false;
 
-        const SNAP_TOL = 12; let isSnapped = false;
-        if (Math.abs(newX) < SNAP_TOL) { newX = 0; isSnapped = true; }
-        if (Math.abs(newY) < SNAP_TOL) { newY = 0; isSnapped = true; }
+        // 僅以第一個選取物件作為 Snap 基準，避免群組錯亂
+        if (targets.length > 0 && initialOffsets.length > 0) {
+            const newX0 = initialOffsets[0].x + dx;
+            const newY0 = initialOffsets[0].y + dy;
+            const SNAP_TOL = 12;
+            if (Math.abs(newX0) < SNAP_TOL) { appliedDx = -initialOffsets[0].x; isSnapped = true; }
+            if (Math.abs(newY0) < SNAP_TOL) { appliedDy = -initialOffsets[0].y; isSnapped = true; }
+        }
         
-        setGuideLines({ active: isSnapped, x: newX === 0 ? 400 : null, y: newY === 0 ? 400 : null });
+        setGuideLines({ active: isSnapped, x: isSnapped ? 400 : null, y: isSnapped ? 400 : null });
 
-        if (target.type === 'title') setTitleOffset({ x: newX, y: newY });
-        else if (target.type === 'icon') setIconOffset({ x: newX, y: newY });
-        else if (target.type === 'tag') {
-            setTagOffsets(prev => { const next = [...prev]; next[target.index] = { x: newX, y: newY }; return next; });
+        let updatedProductOffsets = {};
+        let updatedTitleOffset = titleOffset;
+        let updatedIconOffset = iconOffset;
+        let updatedTagOffsets = [...tagOffsets];
+        let updatedDecoOffsets = {...decoOffsets};
+
+        targets.forEach((target, idx) => {
+            const newX = initialOffsets[idx].x + appliedDx;
+            const newY = initialOffsets[idx].y + appliedDy;
+
+            if (target.type === 'product') updatedProductOffsets[target.id] = { x: newX, y: newY };
+            else if (target.type === 'title') updatedTitleOffset = { x: newX, y: newY };
+            else if (target.type === 'icon') updatedIconOffset = { x: newX, y: newY };
+            else if (target.type === 'tag') updatedTagOffsets[target.index] = { x: newX, y: newY };
+            else if (target.type === 'deco') updatedDecoOffsets[target.key] = { x: newX, y: newY };
+        });
+
+        if (Object.keys(updatedProductOffsets).length > 0) {
+            setProducts(prev => prev.map(p => updatedProductOffsets[p.id] ? { ...p, offset: updatedProductOffsets[p.id] } : p));
         }
-        else if (target.type === 'product') {
-            setProducts(prev => prev.map(p => p.id === target.id ? { ...p, offset: { x: newX, y: newY } } : p));
-        }
-        else if (target.type === 'deco') {
-            setDecoOffsets(prev => ({ ...prev, [target.key]: { x: newX, y: newY } }));
-        }
+        if (targets.some(t => t.type === 'title')) setTitleOffset(updatedTitleOffset);
+        if (targets.some(t => t.type === 'icon')) setIconOffset(updatedIconOffset);
+        if (targets.some(t => t.type === 'tag')) setTagOffsets(updatedTagOffsets);
+        if (targets.some(t => t.type === 'deco')) setDecoOffsets(updatedDecoOffsets);
         
         canvasRef.current.style.cursor = 'grabbing'; return;
     }
@@ -714,16 +767,23 @@ const App = () => {
       if (canvasRef.current) canvasRef.current.style.cursor = 'default'; 
   };
 
+  // --- 🌟 支援多選的滑鼠滾輪 (旋轉) ---
   const handleWheel = (e) => {
-      if (!activeLayer) return;
-      if (e.shiftKey) {
+      if (selectedLayers.length > 0 && e.shiftKey) {
           e.preventDefault();
           const delta = e.deltaY > 0 ? 5 : -5;
-          if (activeLayer.type === 'product') {
-              setProducts(prev => prev.map(p => p.id === activeLayer.id ? { ...p, rotation: (p.rotation || 0) + delta } : p));
-          } else {
-              setRotations(prev => ({ ...prev, [activeLayer.type]: (prev[activeLayer.type] || 0) + delta }));
-          }
+          
+          setProducts(prev => prev.map(p => selectedLayers.some(l => l.type === 'product' && l.id === p.id) ? { ...p, rotation: (p.rotation || 0) + delta } : p));
+          
+          setRotations(prev => {
+              const next = { ...prev };
+              selectedLayers.forEach(l => {
+                  if (l.type === 'title') next.title = (next.title || 0) + delta;
+                  if (l.type === 'icon') next.icon = (next.icon || 0) + delta;
+                  if (l.type === 'deco') next.deco = (next.deco || 0) + delta;
+              });
+              return next;
+          });
       }
   };
 
@@ -740,7 +800,8 @@ const App = () => {
 
   const toggleLock = (layerId) => {
       setLockedLayers(p => ({...p, [layerId]: !p[layerId]}));
-      if (activeLayer?.id === layerId || activeLayer?.type === layerId) setActiveLayer(null); 
+      // 解除剛被鎖定圖層的選取狀態
+      setSelectedLayers(prev => prev.filter(l => l.id !== layerId && l.type !== layerId && l.key !== layerId));
   };
 
   useEffect(() => {
@@ -767,7 +828,7 @@ const App = () => {
         
         drawFn(ctx, -w/2, -h/2, w, h);
 
-        const isActive = activeLayer?.type === layerType && (layerKey === undefined || activeLayer?.key === layerKey || activeLayer?.id === layerKey);
+        const isActive = selectedLayers.some(l => l.type === layerType && (layerKey === undefined || l.key === layerKey || l.id === layerKey || l.index === layerKey));
         if (isActive) {
             ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 2; ctx.setLineDash([6, 6]);
             ctx.strokeRect(-w/2 - 5, -h/2 - 5, w + 10, h + 10); ctx.setLineDash([]);
@@ -1056,7 +1117,8 @@ const App = () => {
 
                 hitBoxes.current.tags[i] = { x: currentX, y: currentY, w: tagPaddings[i], h: tagHeight };
                 
-                const isActive = activeLayer?.type === 'tag' && activeLayer?.index === i;
+                // Active State for Tags
+                const isActive = selectedLayers.some(l => l.type === 'tag' && l.index === i);
                 if (isActive) { ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 2; ctx.setLineDash([4, 4]); ctx.strokeRect(currentX - 2, currentY - 2, tagPaddings[i] + 4, tagHeight + 4); ctx.setLineDash([]); }
 
                 const currentTagColor = tagCustomColors[i] || accentColor;
@@ -1126,7 +1188,7 @@ const App = () => {
         }
     };
     renderCanvas();
-  }, [products, iconImage, platform, template, promoText, subTitleText, tagsInput, brandText, logoText, isAiDisclosure, removeBg, primaryColor, accentColor, textColor, productScale, brandScale, textScale, tagScale, tagShape, showLogo, showTitle, showTags, titleFont, tagFont, iconScale, titleOffset, iconOffset, tagOffsets, decoOffsets, activeLayer, rotations, guideLines, cyberBgMode, layerOrder, tagCustomColors]);
+  }, [products, iconImage, platform, template, promoText, subTitleText, tagsInput, brandText, logoText, isAiDisclosure, removeBg, primaryColor, accentColor, textColor, productScale, brandScale, textScale, tagScale, tagShape, showLogo, showTitle, showTags, titleFont, tagFont, iconScale, titleOffset, iconOffset, tagOffsets, decoOffsets, selectedLayers, rotations, guideLines, cyberBgMode, layerOrder, tagCustomColors]);
 
   const complianceResult = checkCompliance(promoText + tagsInput);
 
@@ -1155,11 +1217,60 @@ const App = () => {
           </div>
         </div>
 
-        {/* 🌟 動態屬性面板 (Contextual UI) 切換邏輯 🌟 */}
-        {activeLayer ? (
+        {/* 🌟 動態屬性面板 (Contextual UI) 🌟 */}
+        {isMultiSelect ? (
             <div className="flex-1 overflow-y-auto p-5 bg-slate-50 space-y-5 custom-scrollbar pb-28 relative">
                 <div className="sticky top-0 bg-slate-50 pb-3 mb-2 border-b border-slate-200 z-10">
-                    <button className="flex items-center gap-1.5 text-slate-500 hover:text-sky-600 transition-colors font-bold text-sm bg-white px-3 py-1.5 rounded-full shadow-sm border border-slate-100" onClick={() => setActiveLayer(null)}>
+                    <button className="flex items-center gap-1.5 text-slate-500 hover:text-sky-600 transition-colors font-bold text-sm bg-white px-3 py-1.5 rounded-full shadow-sm border border-slate-100" onClick={() => setSelectedLayers([])}>
+                        <ArrowLeft className="w-4 h-4" /> 返回全局總覽
+                    </button>
+                </div>
+
+                <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-black text-lg text-slate-800 flex items-center gap-2">
+                            <Layers className="w-5 h-5 text-sky-500" />
+                            多圖層選取模式
+                        </h3>
+                    </div>
+                    
+                    <p className="text-xs font-bold text-sky-600 bg-sky-50 p-2 rounded mb-4 border border-sky-100">
+                        ✅ 已選取 {selectedLayers.length} 個圖層
+                    </p>
+                    <p className="text-xs text-slate-500 mb-5 leading-relaxed">
+                        您目前處於多選模式，可以同時在畫布上拖曳移動、使用鍵盤微調，或是旋轉所有選取的物件。
+                    </p>
+
+                    {/* 如果選取中包含商品，允許統一縮放 */}
+                    {selectedLayers.some(l => l.type === 'product') && (
+                        <div className="mb-6 p-4 bg-slate-50 rounded-lg border border-slate-100">
+                            <label className="text-xs font-bold text-slate-700 flex items-center gap-1 mb-2">
+                                <Camera className="w-4 h-4 text-slate-400" /> 統一縮放選取的商品
+                            </label>
+                            <input type="range" defaultValue={100} onChange={(e) => {
+                                const newScale = parseInt(e.target.value);
+                                setProducts(prev => prev.map(p => selectedLayers.some(l => l.type === 'product' && l.id === p.id) ? {...p, scale: newScale} : p));
+                            }} onMouseUp={saveHistorySnapshot} min="10" max="250" className="w-full accent-slate-400" />
+                        </div>
+                    )}
+                    
+                    <button onClick={() => {
+                        const prodIdsToRemove = selectedLayers.filter(l => l.type === 'product').map(l => l.id);
+                        if (prodIdsToRemove.length > 0) {
+                            setProducts(prev => prev.filter(p => !prodIdsToRemove.includes(p.id)));
+                            setLayerOrder(prev => prev.filter(l => !prodIdsToRemove.includes(l)));
+                        }
+                        setSelectedLayers([]);
+                        saveHistorySnapshot();
+                    }} className="w-full bg-red-50 text-red-500 hover:bg-red-100 font-bold text-sm py-2 rounded-lg border border-red-200 transition-colors">
+                        🗑️ 刪除選取的商品圖
+                    </button>
+                </div>
+            </div>
+        ) : activeLayer ? (
+            <div className="flex-1 overflow-y-auto p-5 bg-slate-50 space-y-5 custom-scrollbar pb-28 relative">
+                <div className="sticky top-0 bg-slate-50 pb-3 mb-2 border-b border-slate-200 z-10">
+                    <button className="flex items-center gap-1.5 text-slate-500 hover:text-sky-600 transition-colors font-bold text-sm bg-white px-3 py-1.5 rounded-full shadow-sm border border-slate-100" onClick={() => setSelectedLayers([])}>
                         <ArrowLeft className="w-4 h-4" /> 返回全局總覽
                     </button>
                 </div>
@@ -1175,7 +1286,6 @@ const App = () => {
                         </button>
                     </div>
 
-                    {/* Z-Index 順序調整區 */}
                     <div className="mb-6 bg-slate-50 p-3 rounded-lg border border-slate-100">
                         <p className="text-xs font-bold text-slate-500 mb-2 flex items-center gap-1"><Layers className="w-3 h-3"/> 圖層上下排序</p>
                         <div className="flex gap-2">
@@ -1188,7 +1298,6 @@ const App = () => {
                         </div>
                     </div>
 
-                    {/* 各圖層專屬設定參數 */}
                     <div className="space-y-5">
                         {activeLayer.type === 'product' && (() => {
                             const prod = products.find(p => p.id === activeLayer.id);
@@ -1211,7 +1320,7 @@ const App = () => {
                                     <button onClick={() => {
                                         setProducts(prev => prev.filter(p => p.id !== prod.id));
                                         setLayerOrder(prev => prev.filter(l => l !== prod.id));
-                                        setActiveLayer(null);
+                                        setSelectedLayers([]);
                                         saveHistorySnapshot();
                                     }} className="w-full mt-2 bg-red-50 text-red-500 hover:bg-red-100 font-bold text-sm py-2 rounded-lg border border-red-200 transition-colors">
                                         🗑️ 刪除此商品圖
@@ -1300,7 +1409,7 @@ const App = () => {
                                     <label className="text-xs font-bold text-slate-500 mb-2 flex items-center gap-1"><Maximize className="w-3 h-3" /> 圖示大小縮放 ({iconScale}%)</label>
                                     <input type="range" value={iconScale} onChange={(e) => setIconScale(e.target.value)} onMouseUp={saveHistorySnapshot} min="10" max="100" className="w-full accent-slate-400" />
                                 </div>
-                                <button onClick={()=>{setIconImage(null); setIconOffset({x:150, y:-150}); setActiveLayer(null); saveHistorySnapshot();}} className="w-full mt-2 bg-red-50 text-red-500 hover:bg-red-100 font-bold text-sm py-2 rounded-lg border border-red-200 transition-colors">
+                                <button onClick={()=>{setIconImage(null); setIconOffset({x:150, y:-150}); setSelectedLayers([]); saveHistorySnapshot();}} className="w-full mt-2 bg-red-50 text-red-500 hover:bg-red-100 font-bold text-sm py-2 rounded-lg border border-red-200 transition-colors">
                                     🗑️ 刪除此圖示
                                 </button>
                             </>
@@ -1319,9 +1428,9 @@ const App = () => {
                       <button onClick={() => setShowHelpModal(true)} className="text-[10px] bg-sky-200 hover:bg-sky-300 text-sky-800 font-bold px-2 py-1 rounded transition-colors">查看完整秘笈</button>
                   </div>
                   <ul className="list-disc pl-4 space-y-0.5 opacity-90">
-                      <li>點擊畫布圖層即可選取，使用鍵盤 <kbd className="bg-white px-1 rounded shadow-sm text-slate-600">方向鍵</kbd> 精準微調。</li>
+                      <li>點擊圖層即可獨立設定大小。使用鍵盤 <kbd className="bg-white px-1 rounded shadow-sm text-slate-600">方向鍵</kbd> 精準微調。</li>
                       <li>停留在物件上按住 <kbd className="bg-white px-1 rounded shadow-sm text-slate-600">Shift + 滾輪</kbd> 可進行旋轉。</li>
-                      <li><span className="font-bold text-sky-600">NEW!</span> 支援多圖上傳，點選圖片可獨立設定層級與大小。</li>
+                      <li><span className="font-bold text-sky-600">HOT!</span> 按住 <kbd className="bg-white px-1 rounded shadow-sm text-slate-600">Shift + 滑鼠點擊</kbd> 即可進行多選，統一移動與縮放。</li>
                   </ul>
               </div>
           </div>
@@ -1385,15 +1494,25 @@ const App = () => {
             {/* 多圖縮圖預覽列 */}
             {products.length > 0 && (
                 <div className="mt-4 flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
-                   {products.map((p, idx) => (
-                      <div key={p.id} 
-                           onClick={() => setActiveLayer({type: 'product', id: p.id})}
-                           className={`relative w-14 h-14 border-2 rounded-lg cursor-pointer flex-shrink-0 transition-all ${activeLayer?.id === p.id ? 'border-sky-500 shadow-md' : 'border-slate-200 opacity-70 hover:opacity-100'}`}>
-                         <img src={p.src} className="w-full h-full object-contain rounded-md bg-white" />
-                         {p.isRemovingBg && <div className="absolute inset-0 bg-white/60 flex items-center justify-center rounded-md"><Loader2 className="w-4 h-4 animate-spin text-purple-500" /></div>}
-                         <span className="absolute -bottom-2 -right-2 bg-slate-800 text-white text-[8px] px-1.5 py-0.5 rounded-full shadow">{idx+1}</span>
-                      </div>
-                   ))}
+                   {products.map((p, idx) => {
+                      const isSel = selectedLayers.some(l => l.type === 'product' && l.id === p.id);
+                      return (
+                          <div key={p.id} 
+                               onClick={(e) => {
+                                   if(e.shiftKey) {
+                                       if(isSel) setSelectedLayers(prev => prev.filter(l => l.id !== p.id));
+                                       else setSelectedLayers(prev => [...prev, {type: 'product', id: p.id}]);
+                                   } else {
+                                       setSelectedLayers([{type: 'product', id: p.id}]);
+                                   }
+                               }}
+                               className={`relative w-14 h-14 border-2 rounded-lg cursor-pointer flex-shrink-0 transition-all ${isSel ? 'border-sky-500 shadow-md ring-2 ring-sky-200' : 'border-slate-200 opacity-70 hover:opacity-100'}`}>
+                             <img src={p.src} className="w-full h-full object-contain rounded-md bg-white" />
+                             {p.isRemovingBg && <div className="absolute inset-0 bg-white/60 flex items-center justify-center rounded-md"><Loader2 className="w-4 h-4 animate-spin text-purple-500" /></div>}
+                             <span className="absolute -bottom-2 -right-2 bg-slate-800 text-white text-[8px] px-1.5 py-0.5 rounded-full shadow">{idx+1}</span>
+                          </div>
+                      );
+                   })}
                 </div>
             )}
 
@@ -1438,6 +1557,14 @@ const App = () => {
                     </div>
                 ))}
                 </div>
+
+                {/* 🌟 電競風專屬：深淺底色切換開關 🌟 */}
+                {template === 'CyberNeon' && (
+                    <div className="mt-3 flex bg-slate-200/50 rounded-lg p-1.5">
+                        <button onClick={() => handleCyberBgToggle('dark')} className={`flex-1 text-xs py-2 rounded-md font-bold transition-all ${cyberBgMode === 'dark' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>深色星空底</button>
+                        <button onClick={() => handleCyberBgToggle('light')} className={`flex-1 text-xs py-2 rounded-md font-bold transition-all ${cyberBgMode === 'light' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>淺色科技底</button>
+                    </div>
+                )}
              </div>
           </section>
 
@@ -1731,12 +1858,12 @@ const App = () => {
                 <h4 className="font-bold text-sky-600 flex items-center gap-1.5 border-b border-sky-100 pb-2"><MousePointer2 className="w-4 h-4" /> 基礎滑鼠操作</h4>
                 <ul className="space-y-3 text-sm text-slate-600">
                   <li className="flex flex-col gap-1">
-                      <span className="font-black text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded text-xs w-max">多圖層選擇與編輯</span> 
-                      <span>可上傳多張圖片，<b className="text-sky-600">點選不同圖片</b>即可單獨修改大小、層級、位置與陰影。</span>
+                      <span className="font-black text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded text-xs w-max">Shift + 點擊圖層多選</span> 
+                      <span>可同時選取多張圖片或標籤，進行<b className="text-sky-600">群組拖曳移動</b>與統一縮放。</span>
                   </li>
                   <li className="flex flex-col gap-1">
                       <span className="font-black text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded text-xs w-max">Shift + 滾動滑鼠滾輪</span> 
-                      <span>游標停留在選取物件上時，可任意<b className="text-sky-600">旋轉</b>該圖層。</span>
+                      <span>游標停留在選取物件上時，可任意<b className="text-sky-600">旋轉</b>該圖層(含群組)。</span>
                   </li>
                 </ul>
               </div>
