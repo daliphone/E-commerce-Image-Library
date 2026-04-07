@@ -700,7 +700,6 @@ const App = () => {
         let appliedDy = dy;
         let isSnapped = false;
 
-        // 僅以第一個選取物件作為 Snap 基準，避免群組錯亂
         if (targets.length > 0 && initialOffsets.length > 0) {
             const newX0 = initialOffsets[0].x + dx;
             const newY0 = initialOffsets[0].y + dy;
@@ -800,10 +799,10 @@ const App = () => {
 
   const toggleLock = (layerId) => {
       setLockedLayers(p => ({...p, [layerId]: !p[layerId]}));
-      // 解除剛被鎖定圖層的選取狀態
       setSelectedLayers(prev => prev.filter(l => l.id !== layerId && l.type !== layerId && l.key !== layerId));
   };
 
+  // --- 畫布繪製邏輯 ---
   useEffect(() => {
     if (!canvasRef.current) return;
     const canvas = canvasRef.current;
@@ -1192,6 +1191,23 @@ const App = () => {
 
   const complianceResult = checkCompliance(promoText + tagsInput);
 
+  // 🌟 新增：匯出專圖 (下載圖片) 邏輯 🌟
+  const handleDownload = () => {
+      if (!complianceResult.safe || !canvasRef.current) return;
+      try {
+          const dataUrl = canvasRef.current.toDataURL('image/png', 1.0);
+          const link = document.createElement('a');
+          link.download = `馬尼製圖_${activeTheme.name}_${new Date().getTime()}.png`;
+          link.href = dataUrl;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+      } catch (err) {
+          console.error('匯出失敗:', err);
+          alert('匯出失敗！可能是由於載入了外部受保護的圖片資源導致跨域 (CORS) 錯誤。');
+      }
+  };
+
   return (
     <div className="flex h-screen bg-slate-50 text-slate-800 font-sans overflow-hidden">
       
@@ -1409,7 +1425,7 @@ const App = () => {
                                     <label className="text-xs font-bold text-slate-500 mb-2 flex items-center gap-1"><Maximize className="w-3 h-3" /> 圖示大小縮放 ({iconScale}%)</label>
                                     <input type="range" value={iconScale} onChange={(e) => setIconScale(e.target.value)} onMouseUp={saveHistorySnapshot} min="10" max="100" className="w-full accent-slate-400" />
                                 </div>
-                                <button onClick={()=>{setIconImage(null); setIconOffset({x:150, y:-150}); setSelectedLayers([]); saveHistorySnapshot();}} className="w-full mt-2 bg-red-50 text-red-500 hover:bg-red-100 font-bold text-sm py-2 rounded-lg border border-red-200 transition-colors">
+                                <button onClick={()=>{setIconImage(null); setIconOffset({x:150, y:-150}); setActiveLayer(null); saveHistorySnapshot();}} className="w-full mt-2 bg-red-50 text-red-500 hover:bg-red-100 font-bold text-sm py-2 rounded-lg border border-red-200 transition-colors">
                                     🗑️ 刪除此圖示
                                 </button>
                             </>
@@ -1763,13 +1779,15 @@ const App = () => {
         </div>
         )}
 
-        <div className="absolute bottom-0 w-full p-5 border-t border-slate-100 bg-white/95 backdrop-blur shrink-0 z-20">
+        <div className="absolute bottom-0 left-0 w-full p-5 border-t border-slate-100 bg-white/95 backdrop-blur shrink-0 z-20">
           <button 
-            className="w-full font-bold py-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 text-white text-base"
-            style={complianceResult.safe ? { background: activeTheme.gradient } : { background: '#ef4444', cursor: 'not-allowed' }}
+            onClick={handleDownload}
+            disabled={!complianceResult.safe}
+            className="w-full font-bold py-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 text-white text-base disabled:opacity-50 disabled:cursor-not-allowed hover:brightness-110 active:scale-[0.98]"
+            style={complianceResult.safe ? { background: activeTheme.gradient } : { background: '#ef4444' }}
           >
             <Download className="w-6 h-6" /> 
-            {complianceResult.safe ? `匯出 ${activeTheme.name} 專圖` : '請修正違禁詞'}
+            {complianceResult.safe ? `匯出 ${activeTheme.name} 專圖` : '請修正違禁詞後匯出'}
           </button>
         </div>
       </div>
