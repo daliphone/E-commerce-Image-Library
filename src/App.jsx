@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, AlertTriangle, CheckCircle, Settings, Download, Layout, Type, ShieldCheck, Info, Image as ImageIcon, Sliders, Palette, Maximize, Box, Move, Type as TypeIcon, ImagePlus, RotateCcw, Cloud, Save, DownloadCloud, Loader2, Link2, GripVertical, Wand2, Key, Layers, Undo2, Redo2, Lock, Unlock, MousePointer2, X } from 'lucide-react';
+import { Camera, AlertTriangle, CheckCircle, Settings, Download, Layout, Type, ShieldCheck, Info, Image as ImageIcon, Sliders, Palette, Maximize, Box, Move, Type as TypeIcon, ImagePlus, RotateCcw, Cloud, Save, DownloadCloud, Loader2, Link2, GripVertical, Wand2, Key, Layers, Undo2, Redo2, Lock, Unlock, MousePointer2, X, ArrowLeft } from 'lucide-react';
 
 const App = () => {
   // 核心狀態
@@ -11,7 +11,7 @@ const App = () => {
   
   // 視覺效果狀態
   const [removeBg, setRemoveBg] = useState(true); 
-  const [cyberBgMode, setCyberBgMode] = useState('dark'); // 新增：電競風深淺色切換
+  const [cyberBgMode, setCyberBgMode] = useState('dark'); 
 
   // --- Remove.bg API ---
   const [enableRemoveBgApi, setEnableRemoveBgApi] = useState(false);
@@ -23,7 +23,6 @@ const App = () => {
   const [leftWidth, setLeftWidth] = useState(560); 
   const [isDragActive, setIsDragActive] = useState(false);
 
-  // 🛍️ 平台與色彩規範 (新增 Yahoo 雙平台)
   const THEMES = {
     Shopee: { name: '蝦皮購物', main: '#f97316', gradient: 'linear-gradient(135deg, #fb923c, #ef4444)', bg: '#fff7ed', border: '#fdba74', text: '#ea580c', allowText: true },
     Momo: { name: 'Momo 購物', main: '#ec4899', gradient: 'linear-gradient(135deg, #f472b6, #e11d48)', bg: '#fdf2f8', border: '#f9a8d4', text: '#be185d', allowText: false },
@@ -40,6 +39,7 @@ const App = () => {
   const [logoText, setLogoText] = useState('BRAND');
   const [brandText, setBrandText] = useState('官方授權店');
   const [promoText, setPromoText] = useState('GPLUS 智慧手機');
+  const [subTitleText, setSubTitleText] = useState('嚴選推薦'); 
   const [tagsInput, setTagsInput] = useState('公司貨,極窄邊框,資安認證');
   const [isAiDisclosure, setIsAiDisclosure] = useState(false);
 
@@ -61,18 +61,16 @@ const App = () => {
   const [titleOffset, setTitleOffset] = useState({ x: 0, y: 0 });
   const [iconOffset, setIconOffset] = useState({ x: 150, y: -150 });
   const [tagOffsets, setTagOffsets] = useState([]);
+  const [decoOffsets, setDecoOffsets] = useState({ frame: { x: 0, y: 0 }, bars: { x: 0, y: 0 }, poly: { x: 0, y: 0 }, cyber: { x: 0, y: 0 }, premium: { x: 0, y: 0 } });
   
-  // 裝飾圖層位置狀態
-  const [decoOffsets, setDecoOffsets] = useState({ 
-      frame: { x: 0, y: 0 }, 
-      bars: { x: 0, y: 0 }, 
-      poly: { x: 0, y: 0 },
-      cyber: { x: 0, y: 0 },
-      premium: { x: 0, y: 0 }
-  });
+  // 動態 Z-Index 圖層排序
+  const [layerOrder, setLayerOrder] = useState(['deco', 'product', 'tags', 'title', 'icon']);
+  
+  // 特點標籤獨立換色字典
+  const [tagCustomColors, setTagCustomColors] = useState({});
 
   const [lockedLayers, setLockedLayers] = useState({ product: false, deco: false, title: false, icon: false });
-  const [activeLayer, setActiveLayer] = useState(null);
+  const [activeLayer, setActiveLayer] = useState(null); 
   const [rotations, setRotations] = useState({ product: 0, title: 0, icon: 0, deco: 0 });
   const [guideLines, setGuideLines] = useState({ x: null, y: null, active: false });
   const [showHelpModal, setShowHelpModal] = useState(false); 
@@ -94,7 +92,6 @@ const App = () => {
 
   const BANNED_WORDS = ['第一', '最強', '最優', '療效', '根治', '殺頭價', '保證見效'];
 
-  // 🎨 視覺模板清單
   const TEMPLATES = {
     LightSoft: { name: '柔和明亮框', desc: '純白底+微漸層點綴' },
     LightClean: { name: '極簡亮白底', desc: '乾淨無框+底部色條' },
@@ -105,7 +102,12 @@ const App = () => {
   };
 
   const saveHistorySnapshot = () => {
-    const stateSnapshot = { productOffset, titleOffset, iconOffset, tagOffsets, decoOffsets, rotations, productScale, brandScale, textScale, tagScale, iconScale, primaryColor, accentColor, textColor, cyberBgMode };
+    const stateSnapshot = { 
+        productOffset, titleOffset, iconOffset, tagOffsets, decoOffsets, rotations, 
+        productScale, brandScale, textScale, tagScale, iconScale, 
+        primaryColor, accentColor, textColor, cyberBgMode,
+        layerOrder, tagCustomColors, subTitleText
+    };
     historyRef.current = historyRef.current.slice(0, historyIndex.current + 1);
     historyRef.current.push(JSON.stringify(stateSnapshot));
     if (historyRef.current.length > 30) historyRef.current.shift(); 
@@ -135,11 +137,39 @@ const App = () => {
     if(state.primaryColor) setPrimaryColor(state.primaryColor);
     if(state.accentColor) setAccentColor(state.accentColor);
     if(state.textColor) setTextColor(state.textColor);
+    
+    setLayerOrder(state.layerOrder || ['deco', 'product', 'tags', 'title', 'icon']);
+    setTagCustomColors(state.tagCustomColors || {});
+    setSubTitleText(state.subTitleText || '嚴選推薦');
   };
 
   useEffect(() => { if (historyRef.current.length === 0) saveHistorySnapshot(); }, []);
 
-  // --- 💡 智慧模板與色彩預設切換 ---
+  const moveLayerUp = (type) => {
+      const idx = layerOrder.indexOf(type);
+      if (idx < layerOrder.length - 1) {
+          const newOrder = [...layerOrder];
+          [newOrder[idx], newOrder[idx + 1]] = [newOrder[idx + 1], newOrder[idx]];
+          setLayerOrder(newOrder);
+          setTimeout(saveHistorySnapshot, 50);
+      }
+  };
+
+  const moveLayerDown = (type) => {
+      const idx = layerOrder.indexOf(type);
+      if (idx > 0) {
+          const newOrder = [...layerOrder];
+          [newOrder[idx], newOrder[idx - 1]] = [newOrder[idx - 1], newOrder[idx]];
+          setLayerOrder(newOrder);
+          setTimeout(saveHistorySnapshot, 50);
+      }
+  };
+
+  const getLayerName = (type) => {
+      const names = { product: '📦 商品主體', title: '✏️ 文字與標題', tag: '🏷️ 特點標籤', icon: '🌟 外部圖示', deco: '🖼️ 背景裝飾' };
+      return names[type] || '圖層';
+  };
+
   const handleTemplateChange = (t) => {
       setTemplate(t);
       if (t === 'CyberNeon') {
@@ -198,18 +228,15 @@ const App = () => {
     return () => window.removeEventListener('keyup', handleKeyUp);
   }, [activeLayer, productOffset, titleOffset, iconOffset, tagOffsets, decoOffsets]);
 
-
   useEffect(() => {
     const savedUrl = localStorage.getItem('ManiFactory_GAS_URL');
     if (savedUrl) setGasUrl(savedUrl);
-    
     const savedBgKey = localStorage.getItem('ManiFactory_RemoveBg_Key');
     if (savedBgKey) { setRemoveBgApiKey(savedBgKey); setEnableRemoveBgApi(true); }
 
     const currentMonth = new Date().toISOString().slice(0, 7); 
     const savedMonth = localStorage.getItem('ManiFactory_RemoveBg_Month');
     const savedCount = parseInt(localStorage.getItem('ManiFactory_RemoveBg_Count') || '0', 10);
-
     if (savedMonth !== currentMonth) {
         localStorage.setItem('ManiFactory_RemoveBg_Month', currentMonth);
         localStorage.setItem('ManiFactory_RemoveBg_Count', '0');
@@ -254,6 +281,13 @@ const App = () => {
       } catch (err) { alert(`Remove.bg API 錯誤: ${err.message}`); setIsRemovingBg(false); setImage(base64Img); }
   };
 
+  // 補回遺失的 Remove.bg API Key 變更函式
+  const handleApiKeyChange = (e) => {
+      const val = e.target.value;
+      setRemoveBgApiKey(val);
+      localStorage.setItem('ManiFactory_RemoveBg_Key', val);
+  };
+
   const processUpload = (file) => {
       if (file && file.type.startsWith('image/')) {
         const reader = new FileReader();
@@ -295,9 +329,10 @@ const App = () => {
 
     const payload = {
       projectName, platform, template, removeBg, primaryColor, accentColor, textColor,
-      logoText, brandText, promoText, tagsInput, isAiDisclosure, tagShape, showLogo, showTitle, showTags,
+      logoText, brandText, promoText, subTitleText, tagsInput, isAiDisclosure, tagShape, showLogo, showTitle, showTags,
       titleFont, tagFont, productScale, brandScale, textScale, tagScale, iconScale, 
       productOffset, titleOffset, iconOffset, tagOffsets, decoOffsets, rotations, cyberBgMode,
+      layerOrder, tagCustomColors,
       imageBase64: image, iconImageBase64: iconImage
     };
 
@@ -326,16 +361,21 @@ const App = () => {
   const applyTemplate = async (params) => {
     setPlatform(params.platform); setTemplate(params.template); setRemoveBg(params.removeBg);
     setPrimaryColor(params.primaryColor); setAccentColor(params.accentColor); setTextColor(params.textColor);
-    setLogoText(params.logoText || 'BRAND'); setBrandText(params.brandText); setPromoText(params.promoText); setTagsInput(params.tagsInput);
-    setIsAiDisclosure(params.isAiDisclosure); setTagShape(params.tagShape); setShowLogo(params.showLogo);
-    setShowTitle(params.showTitle); setShowTags(params.showTags); setTitleFont(params.titleFont);
-    setTagFont(params.tagFont); setProductScale(params.productScale); setBrandScale(params.brandScale || 100); setTextScale(params.textScale);
-    setTagScale(params.tagScale); setIconScale(params.iconScale); setTitleOffset(params.titleOffset);
-    setIconOffset(params.iconOffset); setTagOffsets(params.tagOffsets);
+    setLogoText(params.logoText || 'BRAND'); setBrandText(params.brandText); 
+    setPromoText(params.promoText); setSubTitleText(params.subTitleText || '嚴選推薦');
+    setTagsInput(params.tagsInput); setIsAiDisclosure(params.isAiDisclosure); setTagShape(params.tagShape); 
+    setShowLogo(params.showLogo); setShowTitle(params.showTitle); setShowTags(params.showTags); 
+    setTitleFont(params.titleFont); setTagFont(params.tagFont); 
+    setProductScale(params.productScale); setBrandScale(params.brandScale || 100); 
+    setTextScale(params.textScale); setTagScale(params.tagScale); setIconScale(params.iconScale); 
+    setTitleOffset(params.titleOffset); setIconOffset(params.iconOffset); setTagOffsets(params.tagOffsets);
     setProductOffset(params.productOffset || { x: 0, y: params.productOffsetY || 0 });
     setDecoOffsets(params.decoOffsets || { frame: { x: 0, y: 0 }, bars: { x: 0, y: 0 }, poly: { x: 0, y: 0 }, cyber: {x:0, y:0}, premium: {x:0, y:0} });
     setRotations(params.rotations || { product: 0, title: 0, icon: 0, deco: 0 });
     setCyberBgMode(params.cyberBgMode || 'dark');
+    
+    setLayerOrder(params.layerOrder || ['deco', 'product', 'tags', 'title', 'icon']);
+    setTagCustomColors(params.tagCustomColors || {});
 
     if (params.savedMainImageUrl) { setImage(params.savedMainImageUrl); setRawImage(params.savedMainImageUrl); }
     if (params.savedIconImageUrl) setIconImage(params.savedIconImageUrl);
@@ -353,46 +393,52 @@ const App = () => {
     return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
   };
 
+  const checkHit = (x, y, box) => {
+      return box && x >= box.x && x <= box.x + box.w && y >= box.y && y <= box.y + box.h;
+  };
+
   const handleMouseDown = (e) => {
-    if (!activeTheme.allowText) {
-        const { x, y } = getMousePos(e);
-        const boxes = hitBoxes.current;
-        if (!lockedLayers.product && image && boxes.product && x >= boxes.product.x && x <= boxes.product.x + boxes.product.w && y >= boxes.product.y && y <= boxes.product.y + boxes.product.h) {
-            dragInfo.current = { isDragging: true, target: { type: 'product' }, startX: x, startY: y, initialOffset: productOffset };
-            setActiveLayer({ type: 'product' }); return;
-        }
-        setActiveLayer(null); return; 
-    }
-    
     const { x, y } = getMousePos(e);
     const boxes = hitBoxes.current;
     let clickedSomething = false;
 
-    if (!lockedLayers.icon && iconImage && boxes.icon && x >= boxes.icon.x && x <= boxes.icon.x + boxes.icon.w && y >= boxes.icon.y && y <= boxes.icon.y + boxes.icon.h) {
-        dragInfo.current = { isDragging: true, target: { type: 'icon' }, startX: x, startY: y, initialOffset: iconOffset }; 
-        setActiveLayer({ type: 'icon' }); clickedSomething = true;
-    } else {
-        if (!clickedSomething) {
+    if (!activeTheme.allowText) {
+        if (!lockedLayers.product && image && checkHit(x, y, boxes.product)) {
+            dragInfo.current = { isDragging: true, target: { type: 'product' }, startX: x, startY: y, initialOffset: productOffset };
+            setActiveLayer({ type: 'product' });
+        } else { setActiveLayer(null); }
+        return; 
+    }
+
+    const reversedOrder = [...layerOrder].reverse();
+    
+    for (const layer of reversedOrder) {
+        if (layer === 'icon' && !lockedLayers.icon && iconImage && checkHit(x, y, boxes.icon)) {
+            dragInfo.current = { isDragging: true, target: { type: 'icon' }, startX: x, startY: y, initialOffset: iconOffset }; 
+            setActiveLayer({ type: 'icon' }); clickedSomething = true; break;
+        }
+        if (layer === 'title' && !lockedLayers.title && showTitle && checkHit(x, y, boxes.title)) {
+            dragInfo.current = { isDragging: true, target: { type: 'title' }, startX: x, startY: y, initialOffset: titleOffset }; 
+            setActiveLayer({ type: 'title' }); clickedSomething = true; break;
+        }
+        if (layer === 'tags' && showTags) {
+            let hitTag = false;
             for (let i = boxes.tags.length - 1; i >= 0; i--) {
-                const box = boxes.tags[i];
-                if (box && x >= box.x && x <= box.x + box.w && y >= box.y && y <= box.y + box.h) {
+                if (checkHit(x, y, boxes.tags[i])) {
                     dragInfo.current = { isDragging: true, target: { type: 'tag', index: i }, startX: x, startY: y, initialOffset: tagOffsets[i] || {x:0, y:0} }; 
-                    setActiveLayer({ type: 'tag', index: i }); clickedSomething = true; break;
+                    setActiveLayer({ type: 'tag', index: i }); clickedSomething = true; hitTag = true; break;
                 }
             }
+            if (hitTag) break;
         }
-        if (!clickedSomething && !lockedLayers.title && showTitle && boxes.title && x >= boxes.title.x && x <= boxes.title.x + boxes.title.w && y >= boxes.title.y && y <= boxes.title.y + boxes.title.h) {
-            dragInfo.current = { isDragging: true, target: { type: 'title' }, startX: x, startY: y, initialOffset: titleOffset }; 
-            setActiveLayer({ type: 'title' }); clickedSomething = true;
-        }
-        if (!clickedSomething && !lockedLayers.product && image && boxes.product && x >= boxes.product.x && x <= boxes.product.x + boxes.product.w && y >= boxes.product.y && y <= boxes.product.y + boxes.product.h) {
+        if (layer === 'product' && !lockedLayers.product && image && checkHit(x, y, boxes.product)) {
             dragInfo.current = { isDragging: true, target: { type: 'product' }, startX: x, startY: y, initialOffset: productOffset }; 
-            setActiveLayer({ type: 'product' }); clickedSomething = true;
+            setActiveLayer({ type: 'product' }); clickedSomething = true; break;
         }
-        if (!clickedSomething && !lockedLayers.deco && boxes.deco && x >= boxes.deco.x && x <= boxes.deco.x + boxes.deco.w && y >= boxes.deco.y && y <= boxes.deco.y + boxes.deco.h) {
+        if (layer === 'deco' && !lockedLayers.deco && checkHit(x, y, boxes.deco)) {
             const key = boxes.deco.key;
             dragInfo.current = { isDragging: true, target: { type: 'deco', key: key }, startX: x, startY: y, initialOffset: decoOffsets[key] || {x:0, y:0} }; 
-            setActiveLayer({ type: 'deco', key: key }); clickedSomething = true;
+            setActiveLayer({ type: 'deco', key: key }); clickedSomething = true; break;
         }
     }
 
@@ -434,16 +480,18 @@ const App = () => {
     let isHovering = false;
     const boxes = hitBoxes.current;
     
-    if (!lockedLayers.icon && iconImage && boxes.icon && x >= boxes.icon.x && x <= boxes.icon.x + boxes.icon.w && y >= boxes.icon.y && y <= boxes.icon.y + boxes.icon.h) isHovering = true;
-    if (!isHovering && !lockedLayers.title && showTitle && boxes.title && x >= boxes.title.x && x <= boxes.title.x + boxes.title.w && y >= boxes.title.y && y <= boxes.title.y + boxes.title.h) isHovering = true;
-    if (!isHovering) {
-        for (let i = 0; i < boxes.tags.length; i++) {
-            const box = boxes.tags[i];
-            if (box && x >= box.x && x <= box.x + box.w && y >= box.y && y <= box.y + box.h) { isHovering = true; break; }
+    const reversedOrder = [...layerOrder].reverse();
+    for (const layer of reversedOrder) {
+        if (layer === 'icon' && !lockedLayers.icon && iconImage && checkHit(x, y, boxes.icon)) { isHovering = true; break; }
+        if (layer === 'title' && !lockedLayers.title && showTitle && checkHit(x, y, boxes.title)) { isHovering = true; break; }
+        if (layer === 'tags') {
+            let hit = false;
+            for (let i = 0; i < boxes.tags.length; i++) { if (checkHit(x, y, boxes.tags[i])) { hit = true; break; } }
+            if (hit) { isHovering = true; break; }
         }
+        if (layer === 'product' && !lockedLayers.product && image && checkHit(x, y, boxes.product)) { isHovering = true; break; }
+        if (layer === 'deco' && !lockedLayers.deco && checkHit(x, y, boxes.deco)) { isHovering = true; break; }
     }
-    if (!isHovering && !lockedLayers.product && image && boxes.product && x >= boxes.product.x && x <= boxes.product.x + boxes.product.w && y >= boxes.product.y && y <= boxes.product.y + boxes.product.h) isHovering = true;
-    if (!isHovering && !lockedLayers.deco && boxes.deco && x >= boxes.deco.x && x <= boxes.deco.x + boxes.deco.w && y >= boxes.deco.y && y <= boxes.deco.y + boxes.deco.h) isHovering = true;
 
     canvasRef.current.style.cursor = isHovering ? 'grab' : 'default';
   };
@@ -474,6 +522,7 @@ const App = () => {
       setTagOffsets(tagOffsets.map(() => ({x: 0, y: 0}))); setProductOffset({x: 0, y: 0}); 
       setDecoOffsets({ frame: {x:0, y:0}, bars: {x:0, y:0}, poly: {x:0, y:0}, cyber: {x:0, y:0}, premium: {x:0, y:0} });
       setRotations({ product: 0, title: 0, icon: 0, deco: 0 });
+      setLayerOrder(['deco', 'product', 'tags', 'title', 'icon']);
       setTimeout(() => saveHistorySnapshot(), 50);
   };
 
@@ -521,11 +570,11 @@ const App = () => {
         const isMomoOrYahooMall = !THEMES[platform].allowText;
         const currentTemplate = isMomoOrYahooMall ? 'None' : template;
 
-        // 🎨 背景層填充
+        // 🎨 絕對底層 背景填充
         if (currentTemplate === 'CyberNeon') {
-            ctx.fillStyle = cyberBgMode === 'dark' ? '#0f172a' : '#f0f4f8'; // 電競底色切換
+            ctx.fillStyle = cyberBgMode === 'dark' ? '#0f172a' : '#f0f4f8'; 
         } else if (currentTemplate === 'PremiumGold') {
-            ctx.fillStyle = '#faf9f6'; // 燕麥白
+            ctx.fillStyle = '#faf9f6'; 
         } else {
             ctx.fillStyle = '#FFFFFF';
         }
@@ -534,125 +583,124 @@ const App = () => {
         const mImg = image ? await loadImg(image) : null;
         const iImg = iconImage ? await loadImg(iconImage) : null;
 
-        // 1. 繪製圖層化背景裝飾
-        if (currentTemplate === 'LightSoft') {
-            const grad = ctx.createRadialGradient(width/2, height/2, 100, width/2, height/2, width);
-            grad.addColorStop(0, 'rgba(255,255,255,0)'); grad.addColorStop(1, hexToRgba(primaryColor, 0.08)); 
-            ctx.fillStyle = grad; ctx.fillRect(0, 0, width, height);
-            
-            const fOff = decoOffsets.frame || {x:0, y:0};
-            const fw = width - 30; const fh = height - 30;
-            const fx = 15 + fOff.x; const fy = 15 + fOff.y;
-            
-            drawWithRotation(ctx, fx, fy, fw, fh, rotations.deco, (c, x, y, w, h) => {
-                c.strokeStyle = hexToRgba(primaryColor, 0.2); c.lineWidth = 15; c.strokeRect(x, y, w, h);
-            }, 'deco', 'frame');
-            hitBoxes.current.deco = { key: 'frame', x: fx, y: fy, w: fw, h: fh };
-            
-        } else if (currentTemplate === 'LightClean') {
-             const bOff = decoOffsets.bars || {x:0, y:0};
-             const bx = bOff.x; const by = height - 150 + bOff.y;
-             
-             drawWithRotation(ctx, bx, by, width, 150, rotations.deco, (c, x, y, w, h) => {
-                 const grad = c.createLinearGradient(0, y, 0, y + h);
-                 grad.addColorStop(0, 'rgba(255,255,255,0)'); grad.addColorStop(1, hexToRgba(primaryColor, 0.15));
-                 c.fillStyle = grad; c.fillRect(x, y, w, h);
-             }, 'deco', 'bars');
-             hitBoxes.current.deco = { key: 'bars', x: bx, y: by, w: width, h: 150 };
+        // --- 提取圖層渲染模組 ---
 
-        } else if (currentTemplate === 'TechBright') {
-            const pOff = decoOffsets.poly || {x:0, y:0};
-            const px = pOff.x; const py = pOff.y;
-            
-            drawWithRotation(ctx, 100 + px, height - 150 + py, width - 100, 150, rotations.deco, (c, x, y, w, h) => {
-                c.fillStyle = hexToRgba(primaryColor, 0.1); c.beginPath();
-                c.moveTo(x, y + h); c.lineTo(x + 150, y); c.lineTo(x + w, y); c.lineTo(x + w, y + h); 
-                c.closePath(); c.fill();
-            }, 'deco', 'poly');
-            hitBoxes.current.deco = { key: 'poly', x: 100 + px, y: height - 150 + py, w: width - 100, h: 150 };
-
-        } else if (currentTemplate === 'CyberNeon') {
-            const cOff = decoOffsets.cyber || {x:0, y:0};
-            const cx = 30 + cOff.x; const cy = 30 + cOff.y;
-            const cw = width - 60; const ch = height - 60;
-            
-            drawWithRotation(ctx, cx, cy, cw, ch, rotations.deco, (c, x, y, w, h) => {
-                c.strokeStyle = primaryColor; c.lineWidth = 3;
-                c.shadowColor = primaryColor; c.shadowBlur = cyberBgMode === 'dark' ? 15 : 8; 
-                c.strokeRect(x, y, w, h);
-                c.beginPath(); c.moveTo(x - 15, y + 40); c.lineTo(x, y + 40); c.stroke();
-                c.beginPath(); c.moveTo(x - 15, y + h - 40); c.lineTo(x, y + h - 40); c.stroke();
-                c.beginPath(); c.moveTo(x + w + 15, y + 40); c.lineTo(x + w, y + 40); c.stroke();
-                c.shadowBlur = 0; 
-            }, 'deco', 'cyber');
-            hitBoxes.current.deco = { key: 'cyber', x: cx, y: cy, w: cw, h: ch };
-
-        } else if (currentTemplate === 'PremiumGold') {
-            const pOff = decoOffsets.premium || {x:0, y:0};
-            const px = 40 + pOff.x; const py = 40 + pOff.y;
-            const pw = width - 80; const ph = height - 80;
-            
-            drawWithRotation(ctx, px, py, pw, ph, rotations.deco, (c, x, y, w, h) => {
-                c.strokeStyle = primaryColor; 
-                c.lineWidth = 1; c.strokeRect(x, y, w, h); 
-                c.lineWidth = 0.5; c.strokeRect(x + 10, y + 10, w - 20, h - 20); 
-            }, 'deco', 'premium');
-            hitBoxes.current.deco = { key: 'premium', x: px, y: py, w: pw, h: ph };
-        }
-
-        // 2. 商品主體層
-        let baseScale = 0.75; let baseYOffset = showTitle ? 20 : 0;
-        if (currentTemplate === 'TechBright' || currentTemplate === 'CyberNeon') { baseScale = 0.65; baseYOffset = showTitle ? -20 : 0; }
-
-        const finalScale = baseScale * (productScale / 100);
-        const w = width * finalScale;
-        const h = (mImg && mImg.width) ? ((mImg.height / mImg.width) * w) : w;
-        const x = (width - w) / 2 + (currentTemplate === 'TechBright' ? 60 : 0) + productOffset.x;
-        const y = (height - h) / 2 + baseYOffset + productOffset.y;
-
-        if (mImg) hitBoxes.current.product = { x, y, w, h };
-        
-        drawWithRotation(ctx, x, y, w, h, rotations.product, (c, dx, dy, dw, dh) => {
-            if (currentTemplate === 'CyberNeon') {
-                const cx = dx + dw/2; const cy = dy + dh/2;
-                const radius = Math.max(dw, dh) * 0.7;
-                const glowGrad = c.createRadialGradient(cx, cy, 0, cx, cy, radius);
+        const drawDecoLayer = () => {
+            if (currentTemplate === 'LightSoft') {
+                const grad = ctx.createRadialGradient(width/2, height/2, 100, width/2, height/2, width);
+                grad.addColorStop(0, 'rgba(255,255,255,0)'); grad.addColorStop(1, hexToRgba(primaryColor, 0.08)); 
+                ctx.fillStyle = grad; ctx.fillRect(0, 0, width, height);
                 
-                // 深/淺底光暈透明度微調
-                const op1 = cyberBgMode === 'dark' ? 0.4 : 0.25;
-                const op2 = cyberBgMode === 'dark' ? 0.15 : 0.1;
-                const bgEnd = cyberBgMode === 'dark' ? 'rgba(15, 23, 42, 0)' : 'rgba(240, 244, 248, 0)';
+                const fOff = decoOffsets.frame || {x:0, y:0};
+                const fw = width - 30; const fh = height - 30;
+                const fx = 15 + fOff.x; const fy = 15 + fOff.y;
+                drawWithRotation(ctx, fx, fy, fw, fh, rotations.deco, (c, x, y, w, h) => {
+                    c.strokeStyle = hexToRgba(primaryColor, 0.2); c.lineWidth = 15; c.strokeRect(x, y, w, h);
+                }, 'deco', 'frame');
+                hitBoxes.current.deco = { key: 'frame', x: fx, y: fy, w: fw, h: fh };
                 
-                glowGrad.addColorStop(0, hexToRgba(primaryColor, op1));
-                glowGrad.addColorStop(0.5, hexToRgba(accentColor, op2));
-                glowGrad.addColorStop(1, bgEnd);
-                c.fillStyle = glowGrad;
-                c.beginPath(); c.arc(cx, cy, radius, 0, Math.PI * 2); c.fill();
+            } else if (currentTemplate === 'LightClean') {
+                 const bOff = decoOffsets.bars || {x:0, y:0};
+                 const bx = bOff.x; const by = height - 150 + bOff.y;
+                 drawWithRotation(ctx, bx, by, width, 150, rotations.deco, (c, x, y, w, h) => {
+                     const grad = c.createLinearGradient(0, y, 0, y + h);
+                     grad.addColorStop(0, 'rgba(255,255,255,0)'); grad.addColorStop(1, hexToRgba(primaryColor, 0.15));
+                     c.fillStyle = grad; c.fillRect(x, y, w, h);
+                     
+                     // 把原本畫在 title 區的橫條也併入裝飾圖層
+                     c.fillStyle = accentColor; c.fillRect(x, h - 30, w, 30);
+                     c.fillStyle = primaryColor; c.fillRect(x, h - 45, w, 15);
+                 }, 'deco', 'bars');
+                 hitBoxes.current.deco = { key: 'bars', x: bx, y: by, w: width, h: 150 };
+
+            } else if (currentTemplate === 'TechBright') {
+                const pOff = decoOffsets.poly || {x:0, y:0};
+                const px = pOff.x; const py = pOff.y;
+                drawWithRotation(ctx, 100 + px, height - 150 + py, width - 100, 150, rotations.deco, (c, x, y, w, h) => {
+                    c.fillStyle = hexToRgba(primaryColor, 0.1); c.beginPath();
+                    c.moveTo(x, y + h); c.lineTo(x + 150, y); c.lineTo(x + w, y); c.lineTo(x + w, y + h); 
+                    c.closePath(); c.fill();
+                }, 'deco', 'poly');
+                hitBoxes.current.deco = { key: 'poly', x: 100 + px, y: height - 150 + py, w: width - 100, h: 150 };
+
+            } else if (currentTemplate === 'CyberNeon') {
+                const cOff = decoOffsets.cyber || {x:0, y:0};
+                const cx = 30 + cOff.x; const cy = 30 + cOff.y;
+                const cw = width - 60; const ch = height - 60;
+                drawWithRotation(ctx, cx, cy, cw, ch, rotations.deco, (c, x, y, w, h) => {
+                    c.strokeStyle = primaryColor; c.lineWidth = 3;
+                    c.shadowColor = primaryColor; c.shadowBlur = cyberBgMode === 'dark' ? 15 : 8; 
+                    c.strokeRect(x, y, w, h);
+                    c.beginPath(); c.moveTo(x - 15, y + 40); c.lineTo(x, y + 40); c.stroke();
+                    c.beginPath(); c.moveTo(x - 15, y + h - 40); c.lineTo(x, y + h - 40); c.stroke();
+                    c.beginPath(); c.moveTo(x + w + 15, y + 40); c.lineTo(x + w, y + 40); c.stroke();
+                    c.shadowBlur = 0; 
+                }, 'deco', 'cyber');
+                hitBoxes.current.deco = { key: 'cyber', x: cx, y: cy, w: cw, h: ch };
+
+            } else if (currentTemplate === 'PremiumGold') {
+                const pOff = decoOffsets.premium || {x:0, y:0};
+                const px = 40 + pOff.x; const py = 40 + pOff.y;
+                const pw = width - 80; const ph = height - 80;
+                drawWithRotation(ctx, px, py, pw, ph, rotations.deco, (c, x, y, w, h) => {
+                    c.strokeStyle = primaryColor; 
+                    c.lineWidth = 1; c.strokeRect(x, y, w, h); 
+                    c.lineWidth = 0.5; c.strokeRect(x + 10, y + 10, w - 20, h - 20); 
+                }, 'deco', 'premium');
+                hitBoxes.current.deco = { key: 'premium', x: px, y: py, w: pw, h: ph };
             }
+        };
 
-            if (mImg) { 
-                if (removeBg) {
-                    if (currentTemplate === 'CyberNeon') {
-                        c.shadowColor = primaryColor; c.shadowBlur = cyberBgMode === 'dark' ? 40 : 25; c.shadowOffsetY = 0;
-                    } else {
-                        c.shadowColor = 'rgba(0,0,0,0.08)'; c.shadowBlur = 30; c.shadowOffsetY = 15;
-                    }
+        const drawProductLayer = () => {
+            let baseScale = 0.75; let baseYOffset = showTitle ? 20 : 0;
+            if (currentTemplate === 'TechBright' || currentTemplate === 'CyberNeon') { baseScale = 0.65; baseYOffset = showTitle ? -20 : 0; }
+
+            const finalScale = baseScale * (productScale / 100);
+            const w = width * finalScale;
+            const h = (mImg && mImg.width) ? ((mImg.height / mImg.width) * w) : w;
+            const x = (width - w) / 2 + (currentTemplate === 'TechBright' ? 60 : 0) + productOffset.x;
+            const y = (height - h) / 2 + baseYOffset + productOffset.y;
+
+            if (mImg) hitBoxes.current.product = { x, y, w, h };
+            
+            drawWithRotation(ctx, x, y, w, h, rotations.product, (c, dx, dy, dw, dh) => {
+                if (currentTemplate === 'CyberNeon') {
+                    const cx = dx + dw/2; const cy = dy + dh/2;
+                    const radius = Math.max(dw, dh) * 0.7;
+                    const glowGrad = c.createRadialGradient(cx, cy, 0, cx, cy, radius);
+                    const op1 = cyberBgMode === 'dark' ? 0.4 : 0.25;
+                    const op2 = cyberBgMode === 'dark' ? 0.15 : 0.1;
+                    const bgEnd = cyberBgMode === 'dark' ? 'rgba(15, 23, 42, 0)' : 'rgba(240, 244, 248, 0)';
+                    
+                    glowGrad.addColorStop(0, hexToRgba(primaryColor, op1));
+                    glowGrad.addColorStop(0.5, hexToRgba(accentColor, op2));
+                    glowGrad.addColorStop(1, bgEnd);
+                    c.fillStyle = glowGrad;
+                    c.beginPath(); c.arc(cx, cy, radius, 0, Math.PI * 2); c.fill();
                 }
-                c.drawImage(mImg, dx, dy, dw, dh); 
-                c.shadowBlur = 0; c.shadowOffsetY = 0; 
-            } 
-            else {
-                c.fillStyle = '#f8fafc'; c.fillRect(dx, dy, dw, dh); c.strokeStyle = '#e2e8f0'; c.strokeRect(dx, dy, dw, dh);
-                c.fillStyle = '#94a3b8'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = '20px sans-serif';
-                c.fillText('請上傳商品圖', dx + dw/2, dy + dh/2); c.textBaseline = 'alphabetic'; c.textAlign = 'left';
-            }
-        }, 'product');
 
-        // 3. 裝飾與文字層 
-        if (!isMomoOrYahooMall) {
-            const tags = tagsInput.split(',').map(t => t.trim()).filter(t => t);
+                if (mImg) { 
+                    if (removeBg) {
+                        if (currentTemplate === 'CyberNeon') {
+                            c.shadowColor = primaryColor; c.shadowBlur = cyberBgMode === 'dark' ? 40 : 25; c.shadowOffsetY = 0;
+                        } else {
+                            c.shadowColor = 'rgba(0,0,0,0.08)'; c.shadowBlur = 30; c.shadowOffsetY = 15;
+                        }
+                    }
+                    c.drawImage(mImg, dx, dy, dw, dh); 
+                    c.shadowBlur = 0; c.shadowOffsetY = 0; 
+                } 
+                else {
+                    c.fillStyle = '#f8fafc'; c.fillRect(dx, dy, dw, dh); c.strokeStyle = '#e2e8f0'; c.strokeRect(dx, dy, dw, dh);
+                    c.fillStyle = '#94a3b8'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = '20px sans-serif';
+                    c.fillText('請上傳商品圖', dx + dw/2, dy + dh/2); c.textBaseline = 'alphabetic'; c.textAlign = 'left';
+                }
+            }, 'product');
+        };
+
+        const drawTitleLayer = () => {
+            if (isMomoOrYahooMall) return;
             const actualTextScale = textScale / 100;
-            const actualTagScale = tagScale / 100;
             const actualBrandScale = brandScale / 100;
 
             if (currentTemplate === 'LightSoft' || currentTemplate === 'LightClean') {
@@ -681,13 +729,6 @@ const App = () => {
                     }, 'title');
                     hitBoxes.current.title = { x: finalTx, y: finalTy, w: tW, h: tH };
                 }
-
-                if (currentTemplate === 'LightClean') {
-                    const bx = decoOffsets.bars?.x || 0; const barBy = height - 30 + (decoOffsets.bars?.y || 0);
-                    ctx.fillStyle = accentColor; ctx.fillRect(bx, barBy, width, 30);
-                    ctx.fillStyle = primaryColor; ctx.fillRect(bx, barBy - 15, width, 15);
-                }
-
             } else if (currentTemplate === 'TechBright') {
                 if (showLogo && (logoText || brandText)) {
                     const logoFontSize = 24 * actualBrandScale; const subFontSize = 16 * actualBrandScale;
@@ -707,13 +748,12 @@ const App = () => {
                     
                     drawWithRotation(ctx, finalTx, finalTy - tH + 5, Math.max(150, tW), tH + 30, rotations.title, (c, dx, dy, dw, dh) => {
                         c.fillStyle = primaryColor; c.fillRect(dx, dy + 20, 150, 45);
-                        c.fillStyle = '#FFFFFF'; c.font = `bold ${20 * actualTextScale}px "${titleFont}"`; c.fillText('嚴選推薦', dx + 20, dy + 50);
+                        c.fillStyle = '#FFFFFF'; c.font = `bold ${20 * actualTextScale}px "${titleFont}"`; c.fillText(subTitleText, dx + 20, dy + 50);
                         c.fillStyle = textColor; c.font = `bold ${fontSize}px "${titleFont}"`; c.textBaseline = 'alphabetic'; 
                         c.fillText(promoText, dx + 170, dy + 45 + (fontSize/2));
                     }, 'title');
                     hitBoxes.current.title = { x: finalTx, y: finalTy - fontSize, w: Math.max(150, tW), h: tH + 10 };
                 }
-
             } else if (currentTemplate === 'CyberNeon') {
                 if (showLogo && (logoText || brandText)) {
                     const logoFontSize = 20 * actualBrandScale;
@@ -737,7 +777,6 @@ const App = () => {
                     }, 'title');
                     hitBoxes.current.title = { x: finalTx, y: finalTy, w: tW, h: tH };
                 }
-
             } else if (currentTemplate === 'PremiumGold') {
                 if (showLogo && brandText) {
                     const badgeFontSize = 16 * actualBrandScale;
@@ -760,54 +799,60 @@ const App = () => {
                     hitBoxes.current.title = { x: finalTx, y: finalTy, w: tW, h: tH };
                 }
             }
+        };
 
-            // 共同標籤
-            if (showTags) {
-                const isPremium = currentTemplate === 'PremiumGold';
-                const isCyber = currentTemplate === 'CyberNeon';
+        const drawTagsLayer = () => {
+            if (isMomoOrYahooMall || !showTags) return;
+            const tags = tagsInput.split(',').map(t => t.trim()).filter(t => t);
+            const actualTagScale = tagScale / 100;
+            
+            const isPremium = currentTemplate === 'PremiumGold';
+            const isCyber = currentTemplate === 'CyberNeon';
+            
+            let tagBaseY = currentTemplate === 'LightSoft' || currentTemplate === 'LightClean' ? height - 90 : height - 120;
+            if (isCyber) tagBaseY = 120; 
+            if (isPremium) tagBaseY = height - 70; 
+
+            const tagHeight = (isPremium ? 35 : 45) * actualTagScale;
+            let totalTagsWidth = 0;
+            ctx.font = `bold ${isPremium ? 16 : 20 * actualTagScale}px "${tagFont}"`;
+            const tagPaddings = [];
+            tags.forEach(tag => { const tw = ctx.measureText(tag).width + (isPremium ? 30 : 40 * actualTagScale); totalTagsWidth += tw + 15; tagPaddings.push(tw); });
+            totalTagsWidth -= 15;
+
+            let startX = (width - totalTagsWidth) / 2;
+            tags.forEach((tag, i) => {
+                const offset = tagOffsets[i] || {x: 0, y: 0};
+                const currentX = startX + offset.x; const currentY = tagBaseY + offset.y;
                 
-                let tagBaseY = currentTemplate === 'LightSoft' ? height - 90 : height - 120;
-                if (isCyber) tagBaseY = 120; 
-                if (isPremium) tagBaseY = height - 70; 
+                let radius = tagShape === 'pill' ? (tagHeight/2) : (tagShape === 'rect' ? 8 : (tagHeight/2));
+                if (isPremium) radius = 0; 
 
-                const tagHeight = (isPremium ? 35 : 45) * actualTagScale;
-                let totalTagsWidth = 0;
-                ctx.font = `bold ${isPremium ? 16 : 20 * actualTagScale}px "${tagFont}"`;
-                const tagPaddings = [];
-                tags.forEach(tag => { const tw = ctx.measureText(tag).width + (isPremium ? 30 : 40 * actualTagScale); totalTagsWidth += tw + 15; tagPaddings.push(tw); });
-                totalTagsWidth -= 15;
+                hitBoxes.current.tags[i] = { x: currentX, y: currentY, w: tagPaddings[i], h: tagHeight };
+                
+                const isActive = activeLayer?.type === 'tag' && activeLayer?.index === i;
+                if (isActive) { ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 2; ctx.setLineDash([4, 4]); ctx.strokeRect(currentX - 2, currentY - 2, tagPaddings[i] + 4, tagHeight + 4); ctx.setLineDash([]); }
 
-                let startX = (width - totalTagsWidth) / 2;
-                tags.forEach((tag, i) => {
-                    const offset = tagOffsets[i] || {x: 0, y: 0};
-                    const currentX = startX + offset.x; const currentY = tagBaseY + offset.y;
-                    
-                    let radius = tagShape === 'pill' ? (tagHeight/2) : (tagShape === 'rect' ? 8 : (tagHeight/2));
-                    if (isPremium) radius = 0; 
+                const currentTagColor = tagCustomColors[i] || accentColor;
 
-                    hitBoxes.current.tags[i] = { x: currentX, y: currentY, w: tagPaddings[i], h: tagHeight };
-                    
-                    const isActive = activeLayer?.type === 'tag' && activeLayer?.index === i;
-                    if (isActive) { ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 2; ctx.setLineDash([4, 4]); ctx.strokeRect(currentX - 2, currentY - 2, tagPaddings[i] + 4, tagHeight + 4); ctx.setLineDash([]); }
+                if (tagShape === 'outline' || isPremium) {
+                    ctx.strokeStyle = isPremium ? primaryColor : currentTagColor; ctx.lineWidth = isPremium ? 1 : 2.5;
+                    if(isCyber) { ctx.shadowColor = currentTagColor; ctx.shadowBlur = cyberBgMode === 'dark' ? 10 : 5; }
+                    roundRect(ctx, currentX, currentY, tagPaddings[i], tagHeight, radius, true);
+                    ctx.shadowBlur = 0; ctx.fillStyle = isPremium ? textColor : currentTagColor;
+                } else {
+                    ctx.fillStyle = currentTagColor; 
+                    if(isCyber) { ctx.shadowColor = currentTagColor; ctx.shadowBlur = cyberBgMode === 'dark' ? 15 : 8; }
+                    roundRect(ctx, currentX, currentY, tagPaddings[i], tagHeight, radius, false);
+                    ctx.shadowBlur = 0; ctx.fillStyle = '#FFFFFF';
+                }
+                ctx.textAlign = 'center'; ctx.fillText(tag, currentX + tagPaddings[i]/2, currentY + (tagHeight * 0.68));
+                startX += tagPaddings[i] + 15; 
+            });
+            ctx.textAlign = 'left';
+        };
 
-                    if (tagShape === 'outline' || isPremium) {
-                        ctx.strokeStyle = isPremium ? primaryColor : accentColor; ctx.lineWidth = isPremium ? 1 : 2.5;
-                        if(isCyber) { ctx.shadowColor = accentColor; ctx.shadowBlur = cyberBgMode === 'dark' ? 10 : 5; }
-                        roundRect(ctx, currentX, currentY, tagPaddings[i], tagHeight, radius, true);
-                        ctx.shadowBlur = 0; ctx.fillStyle = isPremium ? textColor : accentColor;
-                    } else {
-                        ctx.fillStyle = accentColor; 
-                        if(isCyber) { ctx.shadowColor = accentColor; ctx.shadowBlur = cyberBgMode === 'dark' ? 15 : 8; }
-                        roundRect(ctx, currentX, currentY, tagPaddings[i], tagHeight, radius, false);
-                        ctx.shadowBlur = 0; ctx.fillStyle = '#FFFFFF';
-                    }
-                    ctx.textAlign = 'center'; ctx.fillText(tag, currentX + tagPaddings[i]/2, currentY + (tagHeight * 0.68));
-                    startX += tagPaddings[i] + 15; 
-                });
-                ctx.textAlign = 'left';
-            }
-
-            // 外部圖示
+        const drawIconLayer = () => {
             if (iImg) {
                 const iW = width * (iconScale / 100); const iH = (iImg.height / iImg.width) * iW;
                 const ix = (width / 2) - (iW / 2) + iconOffset.x; const iy = (height / 2) - (iH / 2) + iconOffset.y;
@@ -816,12 +861,23 @@ const App = () => {
                 }, 'icon');
                 hitBoxes.current.icon = { x: ix, y: iy, w: iW, h: iH };
             }
-        }
+        };
 
+        // --- 根據動態 layerOrder 順序繪製 ---
+        layerOrder.forEach(layer => {
+             if (layer === 'deco') drawDecoLayer();
+             else if (layer === 'product') drawProductLayer();
+             else if (layer === 'title') drawTitleLayer();
+             else if (layer === 'tags') drawTagsLayer();
+             else if (layer === 'icon') drawIconLayer();
+        });
+
+        // 浮水印 (最上層)
         if (isAiDisclosure) {
           ctx.fillStyle = 'rgba(150, 150, 150, 0.6)'; ctx.font = '11px Arial'; ctx.fillText('AI Generated', width - 85, 20);
         }
         
+        // 智慧輔助線 (最上層)
         if (guideLines.active) {
             ctx.strokeStyle = '#f472b6'; ctx.lineWidth = 1; ctx.setLineDash([5, 5]);
             if (guideLines.x) { ctx.beginPath(); ctx.moveTo(width/2, 0); ctx.lineTo(width/2, height); ctx.stroke(); }
@@ -830,7 +886,7 @@ const App = () => {
         }
     };
     renderCanvas();
-  }, [image, iconImage, platform, template, promoText, tagsInput, brandText, logoText, isAiDisclosure, removeBg, primaryColor, accentColor, textColor, productScale, brandScale, textScale, tagScale, tagShape, showLogo, showTitle, showTags, titleFont, tagFont, iconScale, titleOffset, iconOffset, tagOffsets, productOffset, decoOffsets, activeLayer, rotations, guideLines, cyberBgMode]);
+  }, [image, iconImage, platform, template, promoText, subTitleText, tagsInput, brandText, logoText, isAiDisclosure, removeBg, primaryColor, accentColor, textColor, productScale, brandScale, textScale, tagScale, tagShape, showLogo, showTitle, showTags, titleFont, tagFont, iconScale, titleOffset, iconOffset, tagOffsets, productOffset, decoOffsets, activeLayer, rotations, guideLines, cyberBgMode, layerOrder, tagCustomColors]);
 
   const complianceResult = checkCompliance(promoText + tagsInput);
 
@@ -848,7 +904,7 @@ const App = () => {
                 <ImageIcon className="w-6 h-6 text-white" />
                 馬尼製圖工廠 
                 <span className="text-[10px] bg-white text-slate-900 px-2 py-0.5 rounded-full ml-2 font-black shadow-sm flex items-center gap-1">
-                    <Layers className="w-3 h-3 text-sky-500" /> Yahoo 雙平台+全風格版
+                    <Layers className="w-3 h-3 text-sky-500" /> 圖層編輯大師
                 </span>
               </h1>
               
@@ -859,33 +915,145 @@ const App = () => {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5 space-y-6 custom-scrollbar pb-28">
-          
-          <div className="bg-sky-50 border border-sky-200 p-3 rounded-xl shadow-sm text-xs text-sky-800 flex items-start gap-3">
-              <MousePointer2 className="w-5 h-5 text-sky-500 shrink-0 mt-0.5" />
-              <div className="w-full">
-                  <div className="flex justify-between items-center mb-1.5">
-                      <p className="font-bold">✨ 旗艦編輯器新功能解鎖：</p>
-                      <button onClick={() => setShowHelpModal(true)} className="text-[10px] bg-sky-200 hover:bg-sky-300 text-sky-800 font-bold px-2 py-1 rounded transition-colors">查看完整秘笈</button>
-                  </div>
-                  <ul className="list-disc pl-4 space-y-0.5 opacity-90">
-                      <li>點擊畫布圖層即可選取，使用鍵盤 <kbd className="bg-white px-1 rounded shadow-sm text-slate-600">方向鍵</kbd> 精準微調。</li>
-                      <li>停留在物件上按住 <kbd className="bg-white px-1 rounded shadow-sm text-slate-600">Shift + 滾輪</kbd> 可進行旋轉。</li>
-                  </ul>
-              </div>
-          </div>
+        {/* 🌟 動態屬性面板 (Contextual UI) 切換邏輯 🌟 */}
+        {activeLayer ? (
+            <div className="flex-1 overflow-y-auto p-5 bg-slate-50 space-y-5 custom-scrollbar pb-28 relative">
+                <div className="sticky top-0 bg-slate-50 pb-3 mb-2 border-b border-slate-200 z-10">
+                    <button className="flex items-center gap-1.5 text-slate-500 hover:text-sky-600 transition-colors font-bold text-sm bg-white px-3 py-1.5 rounded-full shadow-sm border border-slate-100" onClick={() => setActiveLayer(null)}>
+                        <ArrowLeft className="w-4 h-4" /> 返回全局總覽
+                    </button>
+                </div>
 
+                <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                    <div className="flex justify-between items-center mb-5">
+                        <h3 className="font-black text-lg text-slate-800 flex items-center gap-2">
+                            <Sliders className="w-5 h-5 text-sky-500" />
+                            {getLayerName(activeLayer.type)} 設定
+                        </h3>
+                        <button onClick={() => toggleLock(activeLayer.type)} className={`p-1.5 rounded-md border transition-colors ${lockedLayers[activeLayer.type] ? 'bg-red-50 border-red-200 text-red-500' : 'bg-slate-50 border-slate-200 text-slate-400 hover:text-slate-600'}`} title="鎖定此圖層">
+                            {lockedLayers[activeLayer.type] ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
+                        </button>
+                    </div>
+
+                    {/* Z-Index 順序調整區 */}
+                    <div className="mb-6 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                        <p className="text-xs font-bold text-slate-500 mb-2 flex items-center gap-1"><Layers className="w-3 h-3"/> 圖層上下排序</p>
+                        <div className="flex gap-2">
+                            <button className="flex-1 bg-white border border-slate-200 rounded text-xs font-bold py-2 hover:border-sky-300 hover:text-sky-600 transition-colors shadow-sm disabled:opacity-30 disabled:cursor-not-allowed" disabled={layerOrder.indexOf(activeLayer.type) === layerOrder.length - 1} onClick={() => moveLayerUp(activeLayer.type)}>⬆️ 上移一層</button>
+                            <button className="flex-1 bg-white border border-slate-200 rounded text-xs font-bold py-2 hover:border-sky-300 hover:text-sky-600 transition-colors shadow-sm disabled:opacity-30 disabled:cursor-not-allowed" disabled={layerOrder.indexOf(activeLayer.type) === 0} onClick={() => moveLayerDown(activeLayer.type)}>⬇️ 下移一層</button>
+                        </div>
+                    </div>
+
+                    {/* 各圖層專屬設定參數 */}
+                    <div className="space-y-5">
+                        {activeLayer.type === 'product' && (
+                            <>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 flex items-center gap-1 mb-2"><Camera className="w-3 h-3" /> 商品主體縮放 ({productScale}%)</label>
+                                    <input type="range" value={productScale} onChange={(e) => setProductScale(e.target.value)} onMouseUp={saveHistorySnapshot} min="50" max="150" className="w-full accent-slate-400" />
+                                </div>
+                                <div className="p-3 bg-slate-50 rounded border border-slate-100 flex items-center gap-2">
+                                    <input type="checkbox" checked={removeBg} onChange={(e) => {setRemoveBg(e.target.checked); saveHistorySnapshot();}} id="ctx-remove-bg" className="accent-slate-500 w-4 h-4 rounded cursor-pointer" />
+                                    <label htmlFor="ctx-remove-bg" className="text-xs font-bold text-slate-700 cursor-pointer">顯示立體光影與陰影</label>
+                                </div>
+                            </>
+                        )}
+                        {activeLayer.type === 'title' && (
+                            <>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 flex items-center gap-1 mb-1.5"><TypeIcon className="w-3 h-3" /> 主標題內容</label>
+                                    <input type="text" value={promoText} onChange={(e) => setPromoText(e.target.value)} onBlur={saveHistorySnapshot} className="w-full border border-slate-200 p-2.5 rounded-lg text-sm font-bold bg-slate-50 focus:bg-white focus:outline-none focus:border-sky-400" />
+                                </div>
+                                {template === 'TechBright' && (
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-500 mb-1.5 flex items-center gap-1">✨ 副標題 (科技版專屬)</label>
+                                        <input type="text" value={subTitleText} onChange={(e) => setSubTitleText(e.target.value)} onBlur={saveHistorySnapshot} className="w-full border border-slate-200 p-2.5 rounded-lg text-sm font-bold bg-slate-50 focus:bg-white focus:outline-none focus:border-sky-400" />
+                                    </div>
+                                )}
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 mb-2 flex items-center gap-1"><Maximize className="w-3 h-3" /> 標題大小縮放 ({textScale}%)</label>
+                                    <input type="range" value={textScale} onChange={(e) => setTextScale(e.target.value)} onMouseUp={saveHistorySnapshot} min="50" max="150" className="w-full accent-slate-400" />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 mb-2 flex items-center gap-1"><Palette className="w-3 h-3" /> 文字顏色</label>
+                                    <div className="flex items-center gap-3">
+                                        <input type="color" value={textColor} onChange={(e) => setTextColor(e.target.value)} onBlur={saveHistorySnapshot} className="w-10 h-10 rounded cursor-pointer p-0 border-2 border-slate-100" />
+                                        <span className="text-xs font-mono text-slate-400">{textColor.toUpperCase()}</span>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                        {activeLayer.type === 'tag' && (
+                            <>
+                                <div className="bg-sky-50 border border-sky-100 p-2.5 rounded text-xs text-sky-800 font-bold mb-4">
+                                    👉 您正在編輯第 {activeLayer.index + 1} 個標籤
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 mb-2 flex items-center gap-1"><Palette className="w-3 h-3" /> 此標籤獨立換色</label>
+                                    <div className="flex gap-4 items-center bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                        <input type="color" value={tagCustomColors[activeLayer.index] || accentColor} 
+                                               onChange={(e) => setTagCustomColors(prev => ({...prev, [activeLayer.index]: e.target.value}))} 
+                                               onBlur={saveHistorySnapshot} className="w-10 h-10 rounded cursor-pointer p-0 border-2 border-white shadow-sm" />
+                                        <button className="text-xs text-slate-500 hover:text-sky-600 underline font-bold" 
+                                                onClick={() => { setTagCustomColors(prev => { const next={...prev}; delete next[activeLayer.index]; return next; }); setTimeout(saveHistorySnapshot,50); }}>
+                                            恢復預設重點色
+                                        </button>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 mb-2 flex items-center gap-1"><Maximize className="w-3 h-3" /> 標籤全域大小 ({tagScale}%)</label>
+                                    <input type="range" value={tagScale} onChange={(e) => setTagScale(e.target.value)} onMouseUp={saveHistorySnapshot} min="50" max="150" className="w-full accent-slate-400" />
+                                </div>
+                            </>
+                        )}
+                        {activeLayer.type === 'deco' && (
+                            <>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 mb-2 flex items-center gap-1"><Palette className="w-3 h-3" /> 背景與裝飾色</label>
+                                    <div className="flex gap-4">
+                                        <div className="flex flex-col items-center">
+                                            <input type="color" value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} onBlur={saveHistorySnapshot} className="w-10 h-10 rounded-full cursor-pointer border-4 border-slate-100 p-0 shadow-sm" />
+                                            <span className="text-[10px] text-slate-500 mt-1 font-bold">主色調</span>
+                                        </div>
+                                        <div className="flex flex-col items-center">
+                                            <input type="color" value={accentColor} onChange={(e) => setAccentColor(e.target.value)} onBlur={saveHistorySnapshot} className="w-10 h-10 rounded-full cursor-pointer border-4 border-slate-100 p-0 shadow-sm" />
+                                            <span className="text-[10px] text-slate-500 mt-1 font-bold">重點色</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                {template === 'CyberNeon' && (
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-500 mb-2">電競底色模式</label>
+                                        <div className="flex bg-slate-200/50 rounded-lg p-1.5">
+                                            <button onClick={() => handleCyberBgToggle('dark')} className={`flex-1 text-xs py-2 rounded-md font-bold transition-all ${cyberBgMode === 'dark' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>星空底</button>
+                                            <button onClick={() => handleCyberBgToggle('light')} className={`flex-1 text-xs py-2 rounded-md font-bold transition-all ${cyberBgMode === 'light' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>科技底</button>
+                                        </div>
+                                    </div>
+                                )}
+                            </>
+                        )}
+                        {activeLayer.type === 'icon' && (
+                            <>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 mb-2 flex items-center gap-1"><Maximize className="w-3 h-3" /> 圖示大小縮放 ({iconScale}%)</label>
+                                    <input type="range" value={iconScale} onChange={(e) => setIconScale(e.target.value)} onMouseUp={saveHistorySnapshot} min="10" max="100" className="w-full accent-slate-400" />
+                                </div>
+                                <button onClick={()=>{setIconImage(null); setIconOffset({x:150, y:-150}); setActiveLayer(null); saveHistorySnapshot();}} className="w-full mt-2 bg-red-50 text-red-500 hover:bg-red-100 font-bold text-sm py-2 rounded-lg border border-red-200 transition-colors">
+                                    🗑️ 刪除此圖示
+                                </button>
+                            </>
+                        )}
+                    </div>
+                </div>
+            </div>
+        ) : (
+        <div className="flex-1 overflow-y-auto p-5 space-y-6 custom-scrollbar pb-28">
           {/* 圖片上傳區 */}
           <section className="bg-slate-50 p-4 rounded-xl border border-slate-100">
             <div className="flex justify-between items-center mb-3">
                 <label className="text-sm font-bold flex items-center gap-2 text-slate-700">
                     <Camera className="w-4 h-4" style={{ color: activeTheme.main }} /> 1. 原廠商品圖
                 </label>
-                <div className="flex gap-2">
-                    <button onClick={() => toggleLock('product')} className={`p-1.5 rounded-md border transition-colors ${lockedLayers.product ? 'bg-red-50 border-red-200 text-red-500' : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'}`} title="鎖定商品圖層防誤觸">
-                        {lockedLayers.product ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
-                    </button>
-                </div>
             </div>
 
             <div className="flex items-center gap-2 bg-purple-50 px-2 py-1.5 rounded border border-purple-100 mb-3">
@@ -943,17 +1111,12 @@ const App = () => {
                 <span className="text-sm font-bold" style={{ color: activeTheme.main }}>
                   {isDragActive ? '放開以載入圖片' : '點擊或將圖片拖放至此'}
                 </span>
-                <p className="text-[10px] text-slate-400 mt-1">載入後可於右側畫布自由拖曳與旋轉商品位置</p>
+                <p className="text-[10px] text-slate-400 mt-1">載入後可於畫布上點擊商品進行精細設定</p>
               </label>
-            </div>
-
-            <div className="mt-3 flex items-center gap-2 pl-1 bg-white p-2 rounded-lg border border-slate-200">
-                <input type="checkbox" checked={removeBg} onChange={(e) => {setRemoveBg(e.target.checked); saveHistorySnapshot();}} id="remove-bg" className="accent-slate-500 rounded w-4 h-4 cursor-pointer" />
-                <label htmlFor="remove-bg" className="text-xs text-slate-700 font-bold cursor-pointer">加上立體光影與陰影 (建議去背後開啟)</label>
             </div>
           </section>
 
-          {/* 平台適配區 (含 Yahoo) */}
+          {/* 平台適配區 */}
           <section className="space-y-5">
              <div>
                 <label className="block text-sm font-bold mb-2 flex items-center gap-2 text-slate-700">
@@ -966,23 +1129,19 @@ const App = () => {
                     </button>
                 ))}
                 </div>
-                {/* 顯示嚴格規範提示 */}
                 {!activeTheme.allowText && (
                     <p className="mt-2 text-[11px] text-red-500 font-bold flex items-center gap-1 bg-red-50 p-2 rounded border border-red-100">
-                        <AlertTriangle className="w-3 h-3" /> 此平台規範極度嚴格，已自動切換為純白底且隱藏所有文字與裝飾。
+                        <AlertTriangle className="w-3 h-3" /> 此平台規範極度嚴格，已自動切換為純白底且隱藏文字。
                     </p>
                 )}
              </div>
              
-             {/* 視覺模板區 (含電競/質感) */}
+             {/* 視覺模板區 */}
              <div className={!activeTheme.allowText ? 'opacity-30 pointer-events-none' : ''}>
                 <div className="flex justify-between items-center mb-2">
                     <label className="text-sm font-bold flex items-center gap-2 text-slate-700">
                         <Box className="w-4 h-4" style={{ color: activeTheme.main }} /> 3. 視覺風格模板
                     </label>
-                    <button onClick={() => toggleLock('deco')} className={`p-1.5 rounded-md border transition-colors ${lockedLayers.deco ? 'bg-red-50 border-red-200 text-red-500' : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'}`} title="鎖定背景裝飾圖層防誤觸">
-                        {lockedLayers.deco ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
-                    </button>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                 {Object.keys(TEMPLATES).map(t => (
@@ -992,14 +1151,6 @@ const App = () => {
                     </div>
                 ))}
                 </div>
-
-                {/* 🌟 電競風專屬：深淺底色切換開關 🌟 */}
-                {template === 'CyberNeon' && (
-                    <div className="mt-3 flex bg-slate-200/50 rounded-lg p-1.5">
-                        <button onClick={() => handleCyberBgToggle('dark')} className={`flex-1 text-xs py-2 rounded-md font-bold transition-all ${cyberBgMode === 'dark' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>深色星空底</button>
-                        <button onClick={() => handleCyberBgToggle('light')} className={`flex-1 text-xs py-2 rounded-md font-bold transition-all ${cyberBgMode === 'light' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>淺色科技底</button>
-                    </div>
-                )}
              </div>
           </section>
 
@@ -1007,18 +1158,15 @@ const App = () => {
           <section className={!activeTheme.allowText ? 'opacity-30 pointer-events-none' : ''}>
             <div className="flex justify-between items-center mb-2">
                 <label className="block text-sm font-bold flex items-center gap-2 text-slate-700">
-                    <Type className="w-4 h-4" style={{ color: activeTheme.main }} /> 4. 文案設定與拖曳提示
+                    <Type className="w-4 h-4" style={{ color: activeTheme.main }} /> 4. 全局文案設定
                 </label>
-                <button onClick={() => toggleLock('title')} className={`p-1.5 rounded-md border transition-colors ${lockedLayers.title ? 'bg-red-50 border-red-200 text-red-500' : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'}`} title="鎖定標題與文字防誤觸">
-                    {lockedLayers.title ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
-                </button>
             </div>
             
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-5">
                 <div className={!showLogo ? 'opacity-40' : ''}>
                     <div className="flex justify-between items-center mb-2">
                         <label className="flex items-center gap-2 text-xs font-bold text-slate-500 cursor-pointer">
-                            <input type="checkbox" checked={showLogo} onChange={(e)=>{setShowLogo(e.target.checked); saveHistorySnapshot();}} className="accent-slate-500 w-4 h-4" /> 品牌徽章/LOGO (左上角)
+                            <input type="checkbox" checked={showLogo} onChange={(e)=>{setShowLogo(e.target.checked); saveHistorySnapshot();}} className="accent-slate-500 w-4 h-4" /> 品牌徽章/LOGO
                         </label>
                     </div>
                     <div className="flex gap-2">
@@ -1031,7 +1179,7 @@ const App = () => {
                 <div className={!showTitle ? 'opacity-40 border-t border-slate-100 pt-4' : 'border-t border-slate-100 pt-4'}>
                     <div className="flex justify-between items-center mb-2">
                         <label className="flex items-center gap-2 text-xs font-bold text-slate-500 cursor-pointer">
-                            <input type="checkbox" checked={showTitle} onChange={(e)=>{setShowTitle(e.target.checked); saveHistorySnapshot();}} className="accent-slate-500 w-4 h-4" /> 主標題 (可拖曳)
+                            <input type="checkbox" checked={showTitle} onChange={(e)=>{setShowTitle(e.target.checked); saveHistorySnapshot();}} className="accent-slate-500 w-4 h-4" /> 主標題
                         </label>
                         <select value={titleFont} onChange={(e)=>{setTitleFont(e.target.value); saveHistorySnapshot();}} className="text-xs bg-slate-100 border-none rounded p-1.5 outline-none text-slate-600 font-bold cursor-pointer">
                             <option value="Microsoft JhengHei">微軟正黑體</option>
@@ -1041,6 +1189,11 @@ const App = () => {
                         </select>
                     </div>
                     <input type="text" value={promoText} onBlur={saveHistorySnapshot} onChange={(e) => setPromoText(e.target.value)} disabled={!showTitle} className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none text-sm font-bold bg-slate-50" />
+                    {template === 'TechBright' && (
+                        <div className="mt-2">
+                             <input type="text" value={subTitleText} onBlur={saveHistorySnapshot} onChange={(e) => setSubTitleText(e.target.value)} disabled={!showTitle} placeholder="副標題 (預設: 嚴選推薦)" className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none text-sm font-bold bg-slate-50" />
+                        </div>
+                    )}
                 </div>
                 <div className={!showTags ? 'opacity-40 border-t border-slate-100 pt-4' : 'border-t border-slate-100 pt-4'}>
                     <div className="flex justify-between items-center mb-2">
@@ -1062,94 +1215,70 @@ const App = () => {
           <section className={!activeTheme.allowText ? 'opacity-30 pointer-events-none' : ''}>
             <div className="flex justify-between items-center mb-2">
                 <label className="block text-sm font-bold flex items-center gap-2 text-slate-700">
-                  <ImagePlus className="w-4 h-4" style={{ color: activeTheme.main }} /> 5. 外部圖示 (如:免運標章)
+                  <ImagePlus className="w-4 h-4" style={{ color: activeTheme.main }} /> 5. 外部圖示
                 </label>
-                <button onClick={() => toggleLock('icon')} className={`p-1.5 rounded-md border transition-colors ${lockedLayers.icon ? 'bg-red-50 border-red-200 text-red-500' : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'}`} title="鎖定外部圖示防誤觸">
-                    {lockedLayers.icon ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
-                </button>
             </div>
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
                 <div className="flex items-center gap-3">
-                    <label className="cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-bold py-2.5 px-4 rounded-lg transition-colors border border-slate-200">
+                    <label className="cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-bold py-2.5 px-4 rounded-lg transition-colors border border-slate-200 w-full text-center flex items-center justify-center gap-2">
                         <input type="file" onChange={handleIconUpload} className="hidden" accept="image/*" />
-                        選擇圖示 (透明PNG)
+                        {iconImage ? <><CheckCircle className="w-4 h-4 text-emerald-500"/> 已載入，點擊可重選</> : '選擇圖示 (透明PNG)'}
                     </label>
-                    {iconImage ? <span className="text-sm text-emerald-500 font-bold flex items-center gap-1"><CheckCircle className="w-4 h-4"/> 已載入</span> : null}
-                    {iconImage && <button onClick={()=>{setIconImage(null); setIconOffset({x:150, y:-150}); saveHistorySnapshot();}} className="text-xs text-red-400 hover:text-red-600 underline ml-auto">移除</button>}
                 </div>
-                {iconImage && (
-                    <div className="bg-slate-50 p-4 rounded-lg border border-slate-100">
-                        <div className="flex justify-between mb-2"><span className="text-xs font-bold text-slate-500">圖示大小 ({iconScale}%)</span></div>
-                        <input type="range" min="10" max="100" value={iconScale} onMouseUp={saveHistorySnapshot} onChange={(e) => setIconScale(e.target.value)} className="w-full accent-slate-400" />
+                <p className="text-[10px] text-slate-400 text-center">載入後請直接在右側畫布點擊圖示進行大小設定。</p>
+            </div>
+          </section>
+
+          <section className="bg-slate-800 p-4 rounded-xl shadow-inner text-white relative overflow-hidden border border-slate-700 mt-8">
+            <div className="absolute top-0 right-0 p-2 opacity-10 pointer-events-none"><Cloud className="w-24 h-24" /></div>
+            <label className="text-sm font-bold mb-3 flex items-center gap-2 text-sky-300">
+              <Cloud className="w-4 h-4" /> 雲端樣板中心 (GAS + Drive)
+            </label>
+            
+            <div className="space-y-3 relative z-10">
+                <div className="flex gap-2">
+                    <div className="flex-1 bg-slate-900/50 rounded flex items-center px-3 border border-slate-600 focus-within:border-sky-400">
+                        <Link2 className="w-4 h-4 text-slate-400 mr-2" />
+                        <input type="text" placeholder="貼上您的 GAS Web App 網址..." value={gasUrl} onChange={(e) => setGasUrl(e.target.value)} className="w-full bg-transparent text-sm py-2.5 outline-none text-slate-300 placeholder-slate-500" />
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                    <input type="text" placeholder="樣板名稱 (如: 雙11)" value={projectName} onChange={(e) => setProjectName(e.target.value)} className="w-1/2 bg-slate-900/50 text-sm py-2 px-3 rounded border border-slate-600 focus:border-emerald-400 outline-none" />
+                    <button onClick={saveToGAS} disabled={isSaving} className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 text-white text-sm font-bold py-2 px-3 rounded flex items-center justify-center gap-1 transition-colors">
+                        {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                        {isSaving ? '儲存中...' : '儲存樣板'}
+                    </button>
+                    <button onClick={loadFromGAS} disabled={isLoadingList} className="flex-1 bg-sky-600 hover:bg-sky-500 disabled:bg-sky-800 text-white text-sm font-bold py-2 px-3 rounded flex items-center justify-center gap-1 transition-colors">
+                        {isLoadingList ? <Loader2 className="w-4 h-4 animate-spin" /> : <DownloadCloud className="w-4 h-4" />}
+                        載入紀錄
+                    </button>
+                </div>
+                
+                {cloudMessage.text && (
+                    <div className={`text-xs font-bold p-2 rounded text-center ${cloudMessage.type === 'error' ? 'bg-red-500/20 text-red-300 border border-red-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'}`}>
+                        {cloudMessage.text}
+                    </div>
+                )}
+
+                {showLoadMenu && cloudTemplates.length > 0 && (
+                    <div className="mt-2 bg-slate-900 border border-slate-600 rounded p-2 max-h-48 overflow-y-auto">
+                        <div className="flex justify-between items-center mb-2 px-1">
+                            <span className="text-xs text-slate-400 font-bold">選擇要載入的樣板：</span>
+                            <button onClick={()=>setShowLoadMenu(false)} className="text-[10px] text-slate-500 hover:text-white">關閉</button>
+                        </div>
+                        {cloudTemplates.map((t, idx) => (
+                            <div key={idx} onClick={() => applyTemplate(t.parameters)} className="cursor-pointer bg-slate-800 hover:bg-sky-900 border border-slate-700 p-3 rounded mb-2 flex justify-between items-center transition-colors">
+                                <span className="text-sm font-bold text-sky-100">{t.projectName}</span>
+                                <span className="text-xs text-slate-500">{t.timestamp}</span>
+                            </div>
+                        ))}
                     </div>
                 )}
             </div>
           </section>
-
-          {/* 顏色與大小微調 */}
-          <section className={!activeTheme.allowText ? 'opacity-30 pointer-events-none' : ''}>
-            <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-bold flex items-center gap-2 text-slate-700">
-                <Palette className="w-4 h-4" style={{ color: activeTheme.main }} /> 6. 顏色與大小微調
-                </label>
-                <button onClick={resetPositions} className="text-xs flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded font-bold transition-colors">
-                    <RotateCcw className="w-3 h-3" /> 重置所有座標與旋轉
-                </button>
-            </div>
-            
-            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-6">
-                <div className="grid grid-cols-3 gap-4">
-                    <div className="flex flex-col items-center">
-                        <input type="color" value={primaryColor} onBlur={saveHistorySnapshot} onChange={(e) => setPrimaryColor(e.target.value)} className="w-12 h-12 rounded-full cursor-pointer border-4 border-slate-100 p-0 shadow-sm" />
-                        <span className="text-xs text-slate-500 mt-2 font-bold">主色調</span>
-                    </div>
-                    <div className="flex flex-col items-center">
-                        <input type="color" value={accentColor} onBlur={saveHistorySnapshot} onChange={(e) => setAccentColor(e.target.value)} className="w-12 h-12 rounded-full cursor-pointer border-4 border-slate-100 p-0 shadow-sm" />
-                        <span className="text-xs text-slate-500 mt-2 font-bold">重點色</span>
-                    </div>
-                    <div className="flex flex-col items-center">
-                        <input type="color" value={textColor} onBlur={saveHistorySnapshot} onChange={(e) => setTextColor(e.target.value)} className="w-12 h-12 rounded-full cursor-pointer border-4 border-slate-100 p-0 shadow-sm" />
-                        <span className="text-xs text-slate-500 mt-2 font-bold">文字色</span>
-                    </div>
-                </div>
-
-                <hr className="border-slate-100" />
-
-                <div className="space-y-4">
-                    <div className="bg-slate-50 p-4 rounded-lg border border-slate-100">
-                        <div className="flex justify-between items-center mb-3">
-                            <p className="text-xs font-black text-slate-600 flex items-center gap-1"><Camera className="w-4 h-4"/> 商品主體縮放 ({productScale}%)</p>
-                        </div>
-                        <input type="range" min="50" max="150" value={productScale} onMouseUp={saveHistorySnapshot} onChange={(e) => setProductScale(e.target.value)} className="w-full accent-slate-400" />
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-3">
-                        <div className={`bg-slate-50 p-3 rounded-lg border border-slate-100 flex flex-col justify-center ${!showLogo && 'opacity-40'}`}>
-                            <p className="text-[10px] font-black text-slate-600 mb-2 flex items-center gap-1"><ShieldCheck className="w-3 h-3"/> 徽章 ({brandScale}%)</p>
-                            <input type="range" min="50" max="150" value={brandScale} onMouseUp={saveHistorySnapshot} onChange={(e) => setBrandScale(e.target.value)} disabled={!showLogo} className="w-full accent-slate-400" />
-                        </div>
-                        <div className={`bg-slate-50 p-3 rounded-lg border border-slate-100 flex flex-col justify-center ${!showTitle && 'opacity-40'}`}>
-                            <p className="text-[10px] font-black text-slate-600 mb-2 flex items-center gap-1"><TypeIcon className="w-3 h-3"/> 標題 ({textScale}%)</p>
-                            <input type="range" min="50" max="150" value={textScale} onMouseUp={saveHistorySnapshot} onChange={(e) => setTextScale(e.target.value)} disabled={!showTitle} className="w-full accent-slate-400" />
-                        </div>
-                        <div className={`bg-slate-50 p-3 rounded-lg border border-slate-100 flex flex-col justify-center ${!showTags && 'opacity-40'}`}>
-                            <p className="text-[10px] font-black text-slate-600 mb-2 flex items-center gap-1"><Box className="w-3 h-3"/> 標籤 ({tagScale}%)</p>
-                            <input type="range" min="50" max="150" value={tagScale} onMouseUp={saveHistorySnapshot} onChange={(e) => setTagScale(e.target.value)} disabled={!showTags} className="w-full accent-slate-400" />
-                        </div>
-                    </div>
-
-                    <div className={`bg-slate-50 p-4 rounded-lg border border-slate-100 ${!showTags && 'opacity-40'}`}>
-                        <span className="text-xs font-bold text-slate-500 block mb-2">標籤外觀形狀</span>
-                        <div className="flex bg-slate-200/50 rounded-lg p-1.5">
-                            <button onClick={()=>{setTagShape('pill'); saveHistorySnapshot();}} className={`flex-1 text-xs py-2 rounded-md font-bold transition-all ${tagShape==='pill' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>圓角滿版</button>
-                            <button onClick={()=>{setTagShape('rect'); saveHistorySnapshot();}} className={`flex-1 text-xs py-2 rounded-md font-bold transition-all ${tagShape==='rect' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>微圓角塊</button>
-                            <button onClick={()=>{setTagShape('outline'); saveHistorySnapshot();}} className={`flex-1 text-xs py-2 rounded-md font-bold transition-all ${tagShape==='outline' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>清透線框</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-          </section>
         </div>
+        )}
 
         <div className="absolute bottom-0 w-full p-5 border-t border-slate-100 bg-white/95 backdrop-blur shrink-0 z-20">
           <button 
@@ -1230,7 +1359,7 @@ const App = () => {
         </div>
       </div>
 
-      {/* ================= 快捷鍵與操作指南 Modal (彈出視窗) ================= */}
+      {/* ================= 快捷鍵與操作指南 Modal ================= */}
       {showHelpModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm transition-all" onClick={() => setShowHelpModal(false)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
@@ -1242,26 +1371,20 @@ const App = () => {
             </div>
             
             <div className="p-6 grid grid-cols-2 gap-6 bg-white overflow-y-auto max-h-[70vh]">
-              {/* 基礎操作 */}
               <div className="space-y-4">
                 <h4 className="font-bold text-sky-600 flex items-center gap-1.5 border-b border-sky-100 pb-2"><MousePointer2 className="w-4 h-4" /> 基礎滑鼠操作</h4>
                 <ul className="space-y-3 text-sm text-slate-600">
                   <li className="flex flex-col gap-1">
-                      <span className="font-black text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded text-xs w-max">左鍵點擊與拖曳</span> 
-                      <span>選取並自由移動標題、標籤、商品圖與裝飾圖層。</span>
+                      <span className="font-black text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded text-xs w-max">左鍵點擊圖層</span> 
+                      <span>左側面板將<b className="text-sky-600">智慧切換</b>為該圖層專屬的編輯選項。</span>
                   </li>
                   <li className="flex flex-col gap-1">
                       <span className="font-black text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded text-xs w-max">Shift + 滾動滑鼠滾輪</span> 
-                      <span>游標停留在物件上時，可任意<b className="text-sky-600">旋轉</b>該圖層。</span>
-                  </li>
-                  <li className="flex flex-col gap-1">
-                      <span className="font-black text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded text-xs w-max">左右拖拉分隔線</span> 
-                      <span>滑鼠游標移至左右面板交界處，可拖拉改變左側設定區寬度。</span>
+                      <span>游標停留在選取物件上時，可任意<b className="text-sky-600">旋轉</b>該圖層。</span>
                   </li>
                 </ul>
               </div>
 
-              {/* 進階鍵盤操作 */}
               <div className="space-y-4">
                 <h4 className="font-bold text-emerald-600 flex items-center gap-1.5 border-b border-emerald-100 pb-2"><TypeIcon className="w-4 h-4" /> 鍵盤精準快捷鍵</h4>
                 <ul className="space-y-3 text-sm text-slate-600">
@@ -1270,31 +1393,22 @@ const App = () => {
                       <span>每次移動 <b className="text-emerald-600">1px</b> 進行精準像素對齊。</span>
                   </li>
                   <li className="flex flex-col gap-1">
-                      <span className="font-black text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded text-xs w-max">Shift + ↑↓←→ (方向鍵)</span> 
-                      <span>每次移動 <b className="text-emerald-600">10px</b>，加速位置微調。</span>
-                  </li>
-                  <li className="flex flex-col gap-1">
-                      <span className="font-black text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded text-xs w-max">Ctrl + Z (或 Cmd + Z)</span> 
-                      <span><b className="text-emerald-600">復原</b>上一個步驟 (也可點擊左上角返回按鈕)。</span>
-                  </li>
-                  <li className="flex flex-col gap-1">
-                      <span className="font-black text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded text-xs w-max">Ctrl + Y (或 Cmd + Y)</span> 
-                      <span><b className="text-emerald-600">重做</b>下一步驟。</span>
+                      <span className="font-black text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded text-xs w-max">Ctrl + Z / Ctrl + Y</span> 
+                      <span><b className="text-emerald-600">復原 / 重做</b> 編輯步驟。</span>
                   </li>
                 </ul>
               </div>
 
-              {/* 圖層與排版 */}
               <div className="col-span-2 space-y-4 mt-2">
                 <h4 className="font-bold text-purple-600 flex items-center gap-1.5 border-b border-purple-100 pb-2"><Layers className="w-4 h-4" /> 圖層系統與智慧排版</h4>
                 <div className="grid grid-cols-2 gap-6 text-sm text-slate-600">
                   <div className="bg-purple-50/50 p-3 rounded-lg border border-purple-100">
-                      <p className="font-bold text-slate-800 mb-2 flex items-center gap-1"><Lock className="w-4 h-4 text-purple-500" /> 圖層鎖定防呆</p>
-                      <p className="leading-relaxed">當物件互相重疊時，點擊左側設定區塊右上角的<b className="text-purple-600">「小鎖頭」</b>，鎖定後的圖層將不會被滑鼠選取與拖拉，有效防止誤觸背景或商品主體。</p>
+                      <p className="font-bold text-slate-800 mb-2 flex items-center gap-1"><Lock className="w-4 h-4 text-purple-500" /> 圖層鎖定防呆 & Z-Index</p>
+                      <p className="leading-relaxed">點擊物件後，可在左側面板將其<b className="text-purple-600">上移/下移一層</b>。若圖層重疊，使用「小鎖頭」鎖定上層，即可輕鬆點擊下方圖層。</p>
                   </div>
                   <div className="bg-pink-50/50 p-3 rounded-lg border border-pink-100">
                       <p className="font-bold text-slate-800 mb-2 flex items-center gap-1"><Move className="w-4 h-4 text-pink-500" /> 智慧置中吸附 (Snapping)</p>
-                      <p className="leading-relaxed">拖曳任何圖層靠近畫布的「正中央」(X軸或Y軸) 時，系統會自動將其<b className="text-pink-500">吸附對齊</b>，並顯示粉紅色的十字輔助線，幫助您完美置中排版。</p>
+                      <p className="leading-relaxed">拖曳任何圖層靠近畫布的「正中央」時，系統會自動將其<b className="text-pink-500">吸附對齊</b>，並顯示粉紅色的十字輔助線。</p>
                   </div>
                 </div>
               </div>
