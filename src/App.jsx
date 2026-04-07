@@ -2,21 +2,19 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Camera, AlertTriangle, CheckCircle, Settings, Download, Layout, Type, ShieldCheck, Info, Image as ImageIcon, Sliders, Palette, Maximize, Box, Move, Type as TypeIcon, ImagePlus, RotateCcw, Cloud, Save, DownloadCloud, Loader2, Link2, GripVertical, Wand2, Key, Layers, Undo2, Redo2, Lock, Unlock, MousePointer2, X, ArrowLeft } from 'lucide-react';
 
 const App = () => {
-  // 核心狀態
-  const [rawImage, setRawImage] = useState(null); 
-  const [image, setImage] = useState(null); 
+  // --- 核心狀態 (升級為支援多圖片陣列) ---
+  const [products, setProducts] = useState([]); // { id, src, rawSrc, offset: {x,y}, scale, rotation, shadow, isRemovingBg }
   const [iconImage, setIconImage] = useState(null);
   const [platform, setPlatform] = useState('Shopee');
   const [template, setTemplate] = useState('LightSoft');
   
   // 視覺效果狀態
-  const [removeBg, setRemoveBg] = useState(true); 
+  const [removeBg, setRemoveBg] = useState(true); // 全域光影開關
   const [cyberBgMode, setCyberBgMode] = useState('dark'); 
 
   // --- Remove.bg API ---
   const [enableRemoveBgApi, setEnableRemoveBgApi] = useState(false);
   const [removeBgApiKey, setRemoveBgApiKey] = useState('');
-  const [isRemovingBg, setIsRemovingBg] = useState(false);
   const [bgRemovalCount, setBgRemovalCount] = useState(0); 
 
   // --- UI 面板拖曳寬度狀態 ---
@@ -50,28 +48,26 @@ const App = () => {
   const [titleFont, setTitleFont] = useState('Microsoft JhengHei');
   const [tagFont, setTagFont] = useState('Microsoft JhengHei');
 
-  const [productScale, setProductScale] = useState(100);
   const [brandScale, setBrandScale] = useState(100);
   const [textScale, setTextScale] = useState(100);
   const [tagScale, setTagScale] = useState(100);   
   const [iconScale, setIconScale] = useState(30);
 
   // --- 圖層化架構狀態 ---
-  const [productOffset, setProductOffset] = useState({ x: 0, y: 0 });
   const [titleOffset, setTitleOffset] = useState({ x: 0, y: 0 });
   const [iconOffset, setIconOffset] = useState({ x: 150, y: -150 });
   const [tagOffsets, setTagOffsets] = useState([]);
   const [decoOffsets, setDecoOffsets] = useState({ frame: { x: 0, y: 0 }, bars: { x: 0, y: 0 }, poly: { x: 0, y: 0 }, cyber: { x: 0, y: 0 }, premium: { x: 0, y: 0 } });
   
-  // 動態 Z-Index 圖層排序
-  const [layerOrder, setLayerOrder] = useState(['deco', 'product', 'tags', 'title', 'icon']);
+  // 動態 Z-Index 圖層排序 (支援商品陣列 ID)
+  const [layerOrder, setLayerOrder] = useState(['deco', 'tags', 'title', 'icon']);
   
   // 特點標籤獨立換色字典
   const [tagCustomColors, setTagCustomColors] = useState({});
 
-  const [lockedLayers, setLockedLayers] = useState({ product: false, deco: false, title: false, icon: false });
+  const [lockedLayers, setLockedLayers] = useState({ deco: false, title: false, icon: false });
   const [activeLayer, setActiveLayer] = useState(null); 
-  const [rotations, setRotations] = useState({ product: 0, title: 0, icon: 0, deco: 0 });
+  const [rotations, setRotations] = useState({ title: 0, icon: 0, deco: 0 });
   const [guideLines, setGuideLines] = useState({ x: null, y: null, active: false });
   const [showHelpModal, setShowHelpModal] = useState(false); 
   
@@ -87,7 +83,7 @@ const App = () => {
   const [cloudMessage, setCloudMessage] = useState({ text: '', type: '' });
 
   const canvasRef = useRef(null);
-  const hitBoxes = useRef({ product: null, title: null, icon: null, tags: [], deco: null });
+  const hitBoxes = useRef({ products: {}, title: null, icon: null, tags: [], deco: null });
   const dragInfo = useRef({ isDragging: false, target: null, startX: 0, startY: 0, initialOffset: {x:0, y:0} });
 
   const BANNED_WORDS = ['第一', '最強', '最優', '療效', '根治', '殺頭價', '保證見效'];
@@ -103,8 +99,8 @@ const App = () => {
 
   const saveHistorySnapshot = () => {
     const stateSnapshot = { 
-        productOffset, titleOffset, iconOffset, tagOffsets, decoOffsets, rotations, 
-        productScale, brandScale, textScale, tagScale, iconScale, 
+        products, titleOffset, iconOffset, tagOffsets, decoOffsets, rotations, 
+        brandScale, textScale, tagScale, iconScale, 
         primaryColor, accentColor, textColor, cyberBgMode,
         layerOrder, tagCustomColors, subTitleText
     };
@@ -129,24 +125,46 @@ const App = () => {
   };
 
   const applyHistoryState = (state) => {
-    setProductOffset(state.productOffset); setTitleOffset(state.titleOffset); setIconOffset(state.iconOffset);
+    setTitleOffset(state.titleOffset); setIconOffset(state.iconOffset);
     setTagOffsets(state.tagOffsets); setDecoOffsets(state.decoOffsets); setRotations(state.rotations);
-    setProductScale(state.productScale); setBrandScale(state.brandScale); setTextScale(state.textScale);
+    setBrandScale(state.brandScale); setTextScale(state.textScale);
     setTagScale(state.tagScale); setIconScale(state.iconScale);
     setCyberBgMode(state.cyberBgMode || 'dark');
     if(state.primaryColor) setPrimaryColor(state.primaryColor);
     if(state.accentColor) setAccentColor(state.accentColor);
     if(state.textColor) setTextColor(state.textColor);
     
-    setLayerOrder(state.layerOrder || ['deco', 'product', 'tags', 'title', 'icon']);
+    setLayerOrder(state.layerOrder || ['deco', 'tags', 'title', 'icon']);
     setTagCustomColors(state.tagCustomColors || {});
     setSubTitleText(state.subTitleText || '嚴選推薦');
+
+    // 處理新版 products 或相容舊版單圖結構
+    if (state.products) {
+        setProducts(state.products);
+    } else if (state.imageBase64 || state.rawImage || state.productOffset) {
+        const legacyId = 'prod_legacy';
+        setProducts([{
+            id: legacyId,
+            src: state.imageBase64 || state.image || state.rawImage,
+            rawSrc: state.rawImage || state.imageBase64,
+            offset: state.productOffset || {x:0, y:0},
+            scale: state.productScale || 100,
+            rotation: state.rotations?.product || 0,
+            shadow: true,
+            isRemovingBg: false
+        }]);
+        let oldOrder = state.layerOrder || ['deco', 'product', 'tags', 'title', 'icon'];
+        oldOrder = oldOrder.map(l => l === 'product' ? legacyId : l);
+        setLayerOrder(oldOrder);
+    } else {
+        setProducts([]);
+    }
   };
 
   useEffect(() => { if (historyRef.current.length === 0) saveHistorySnapshot(); }, []);
 
-  const moveLayerUp = (type) => {
-      const idx = layerOrder.indexOf(type);
+  const moveLayerUp = (layerId) => {
+      const idx = layerOrder.indexOf(layerId);
       if (idx < layerOrder.length - 1) {
           const newOrder = [...layerOrder];
           [newOrder[idx], newOrder[idx + 1]] = [newOrder[idx + 1], newOrder[idx]];
@@ -155,8 +173,8 @@ const App = () => {
       }
   };
 
-  const moveLayerDown = (type) => {
-      const idx = layerOrder.indexOf(type);
+  const moveLayerDown = (layerId) => {
+      const idx = layerOrder.indexOf(layerId);
       if (idx > 0) {
           const newOrder = [...layerOrder];
           [newOrder[idx], newOrder[idx - 1]] = [newOrder[idx - 1], newOrder[idx]];
@@ -165,8 +183,9 @@ const App = () => {
       }
   };
 
-  const getLayerName = (type) => {
-      const names = { product: '📦 商品主體', title: '✏️ 文字與標題', tag: '🏷️ 特點標籤', icon: '🌟 外部圖示', deco: '🖼️ 背景裝飾' };
+  const getLayerName = (type, id) => {
+      if (type === 'product') return '📦 商品主體';
+      const names = { title: '✏️ 文字與標題', tag: '🏷️ 特點標籤', icon: '🌟 外部圖示', deco: '🖼️ 背景裝飾' };
       return names[type] || '圖層';
   };
 
@@ -210,7 +229,9 @@ const App = () => {
 
           if (dx !== 0 || dy !== 0) {
               e.preventDefault();
-              if (activeLayer.type === 'product') setProductOffset(p => ({ x: p.x + dx, y: p.y + dy }));
+              if (activeLayer.type === 'product') {
+                  setProducts(prev => prev.map(p => p.id === activeLayer.id ? { ...p, offset: { x: p.offset.x + dx, y: p.offset.y + dy } } : p));
+              }
               else if (activeLayer.type === 'title') setTitleOffset(p => ({ x: p.x + dx, y: p.y + dy }));
               else if (activeLayer.type === 'icon') setIconOffset(p => ({ x: p.x + dx, y: p.y + dy }));
               else if (activeLayer.type === 'tag') setTagOffsets(p => { const next = [...p]; next[activeLayer.index] = { x: p[activeLayer.index].x + dx, y: p[activeLayer.index].y + dy }; return next; });
@@ -226,7 +247,7 @@ const App = () => {
     const handleKeyUp = (e) => { if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) && activeLayer) saveHistorySnapshot(); };
     window.addEventListener('keyup', handleKeyUp);
     return () => window.removeEventListener('keyup', handleKeyUp);
-  }, [activeLayer, productOffset, titleOffset, iconOffset, tagOffsets, decoOffsets]);
+  }, [activeLayer, products, titleOffset, iconOffset, tagOffsets, decoOffsets]);
 
   useEffect(() => {
     const savedUrl = localStorage.getItem('ManiFactory_GAS_URL');
@@ -259,9 +280,12 @@ const App = () => {
     return { safe: detected.length === 0, words: detected };
   };
 
-  const executeRemoveBg = async (base64Img) => {
+  // --- Remove.bg 單圖去背呼叫 ---
+  const executeRemoveBg = async (prodId, base64Img) => {
       if (!removeBgApiKey) { alert('請先輸入 Remove.bg API Key！'); return; }
-      setIsRemovingBg(true);
+      
+      setProducts(prev => prev.map(p => p.id === prodId ? { ...p, isRemovingBg: true } : p));
+      
       try {
           const res = await fetch(base64Img);
           const blob = await res.blob();
@@ -274,30 +298,54 @@ const App = () => {
 
           const reader = new FileReader();
           reader.onloadend = () => {
-              setImage(reader.result); setIsRemovingBg(false);
+              setProducts(prev => prev.map(p => p.id === prodId ? { ...p, src: reader.result, isRemovingBg: false } : p));
               setBgRemovalCount(prev => { const n = prev + 1; localStorage.setItem('ManiFactory_RemoveBg_Count', n.toString()); return n; });
+              setTimeout(saveHistorySnapshot, 100);
           };
           reader.readAsDataURL(await apiRes.blob());
-      } catch (err) { alert(`Remove.bg API 錯誤: ${err.message}`); setIsRemovingBg(false); setImage(base64Img); }
+      } catch (err) { 
+          alert(`Remove.bg API 錯誤: ${err.message}`); 
+          setProducts(prev => prev.map(p => p.id === prodId ? { ...p, isRemovingBg: false } : p));
+      }
   };
 
-  // 補回遺失的 Remove.bg API Key 變更函式
   const handleApiKeyChange = (e) => {
       const val = e.target.value;
       setRemoveBgApiKey(val);
       localStorage.setItem('ManiFactory_RemoveBg_Key', val);
   };
 
-  const processUpload = (file) => {
-      if (file && file.type.startsWith('image/')) {
-        const reader = new FileReader();
-        reader.onload = (f) => { setRawImage(f.target.result); setImage(f.target.result); if (enableRemoveBgApi && removeBgApiKey) executeRemoveBg(f.target.result); };
-        reader.readAsDataURL(file);
-      }
+  // 支援多選上傳
+  const processUpload = (files) => {
+      Array.from(files).forEach((file, idx) => {
+          if (file && file.type.startsWith('image/')) {
+            const reader = new FileReader();
+            reader.onload = (f) => { 
+                const result = f.target.result; 
+                const newId = 'prod_' + Date.now() + '_' + idx + Math.floor(Math.random()*1000);
+                const newProd = { id: newId, src: result, rawSrc: result, offset: {x:0, y:0}, scale: 100, rotation: 0, shadow: true, isRemovingBg: false };
+                
+                setProducts(prev => [...prev, newProd]);
+                setLayerOrder(prev => {
+                    const decoIdx = prev.indexOf('deco');
+                    const nextOrder = [...prev];
+                    nextOrder.splice(decoIdx > -1 ? decoIdx + 1 : 0, 0, newId);
+                    return nextOrder;
+                });
+
+                if (enableRemoveBgApi && removeBgApiKey) {
+                    executeRemoveBg(newId, result);
+                } else {
+                    setTimeout(saveHistorySnapshot, 100);
+                }
+            };
+            reader.readAsDataURL(file);
+          }
+      });
   };
 
-  const handleImageUpload = (e) => { processUpload(e.target.files[0]); };
-  const handleDrop = (e) => { e.preventDefault(); setIsDragActive(false); processUpload(e.dataTransfer.files[0]); };
+  const handleImageUpload = (e) => { processUpload(e.target.files); };
+  const handleDrop = (e) => { e.preventDefault(); setIsDragActive(false); processUpload(e.dataTransfer.files); };
   const handleDragOver = (e) => { e.preventDefault(); setIsDragActive(true); };
   const handleDragLeave = (e) => { e.preventDefault(); setIsDragActive(false); };
   const handleIconUpload = (e) => {
@@ -325,22 +373,25 @@ const App = () => {
     if (!gasUrl) { setCloudMessage({ text: '請先輸入 GAS 網址！', type: 'error' }); return; }
     if (!projectName.trim()) { setCloudMessage({ text: '請輸入樣板名稱！', type: 'error' }); return; }
     localStorage.setItem('ManiFactory_GAS_URL', gasUrl);
-    setIsSaving(true); setCloudMessage({ text: '正在上傳參數與圖片至 Google Drive...', type: 'info' });
+    setIsSaving(true); setCloudMessage({ text: '正在上傳參數至 Google Drive...', type: 'info' });
 
+    // 為避免超過 Google Sheets 儲存上限，預設只送出第一張主圖至 GAS 以產生存檔網址，其餘保留參數但不傳 Base64
     const payload = {
       projectName, platform, template, removeBg, primaryColor, accentColor, textColor,
       logoText, brandText, promoText, subTitleText, tagsInput, isAiDisclosure, tagShape, showLogo, showTitle, showTags,
-      titleFont, tagFont, productScale, brandScale, textScale, tagScale, iconScale, 
-      productOffset, titleOffset, iconOffset, tagOffsets, decoOffsets, rotations, cyberBgMode,
+      titleFont, tagFont, brandScale, textScale, tagScale, iconScale, 
+      titleOffset, iconOffset, tagOffsets, decoOffsets, rotations, cyberBgMode,
       layerOrder, tagCustomColors,
-      imageBase64: image, iconImageBase64: iconImage
+      imageBase64: products.length > 0 ? products[0].src : null, 
+      iconImageBase64: iconImage,
+      products: products.map((p, idx) => ({ ...p, src: idx === 0 ? '' : null, rawSrc: null })) // 移除巨大 Base64 字串
     };
 
     try {
       const response = await fetch(gasUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'save', payload: payload }) });
       const result = await response.json();
       if (result.status === 'success') {
-        setCloudMessage({ text: `儲存成功！(${result.data.projectName})`, type: 'success' }); setTimeout(() => setCloudMessage({ text: '', type: '' }), 3000);
+        setCloudMessage({ text: `儲存成功！(受限容量僅備份主圖)`, type: 'success' }); setTimeout(() => setCloudMessage({ text: '', type: '' }), 3000);
       } else setCloudMessage({ text: '儲存失敗: ' + result.message, type: 'error' });
     } catch (err) { setCloudMessage({ text: '連線失敗，請檢查網址或網路狀態。', type: 'error' }); } 
     finally { setIsSaving(false); }
@@ -366,18 +417,45 @@ const App = () => {
     setTagsInput(params.tagsInput); setIsAiDisclosure(params.isAiDisclosure); setTagShape(params.tagShape); 
     setShowLogo(params.showLogo); setShowTitle(params.showTitle); setShowTags(params.showTags); 
     setTitleFont(params.titleFont); setTagFont(params.tagFont); 
-    setProductScale(params.productScale); setBrandScale(params.brandScale || 100); 
+    setBrandScale(params.brandScale || 100); 
     setTextScale(params.textScale); setTagScale(params.tagScale); setIconScale(params.iconScale); 
     setTitleOffset(params.titleOffset); setIconOffset(params.iconOffset); setTagOffsets(params.tagOffsets);
-    setProductOffset(params.productOffset || { x: 0, y: params.productOffsetY || 0 });
     setDecoOffsets(params.decoOffsets || { frame: { x: 0, y: 0 }, bars: { x: 0, y: 0 }, poly: { x: 0, y: 0 }, cyber: {x:0, y:0}, premium: {x:0, y:0} });
     setRotations(params.rotations || { product: 0, title: 0, icon: 0, deco: 0 });
     setCyberBgMode(params.cyberBgMode || 'dark');
-    
-    setLayerOrder(params.layerOrder || ['deco', 'product', 'tags', 'title', 'icon']);
     setTagCustomColors(params.tagCustomColors || {});
 
-    if (params.savedMainImageUrl) { setImage(params.savedMainImageUrl); setRawImage(params.savedMainImageUrl); }
+    // 還原多圖商品參數，或是相容舊版單圖
+    let loadedLayerOrder = params.layerOrder || ['deco', 'tags', 'title', 'icon'];
+    
+    if (params.products && params.products.length > 0) {
+        // 將雲端保存的主圖網址塞回第一個 product 中
+        const loadedProducts = [...params.products];
+        if (params.savedMainImageUrl) {
+            loadedProducts[0].src = params.savedMainImageUrl;
+            loadedProducts[0].rawSrc = params.savedMainImageUrl;
+        }
+        setProducts(loadedProducts);
+        setLayerOrder(loadedLayerOrder);
+    } else if (params.savedMainImageUrl || params.productOffset) {
+        const legacyId = 'prod_legacy';
+        setProducts([{
+            id: legacyId,
+            src: params.savedMainImageUrl || '',
+            rawSrc: params.savedMainImageUrl || '',
+            offset: params.productOffset || {x:0, y:0},
+            scale: params.productScale || 100,
+            rotation: params.rotations?.product || 0,
+            shadow: true,
+            isRemovingBg: false
+        }]);
+        loadedLayerOrder = loadedLayerOrder.map(l => l === 'product' ? legacyId : l);
+        setLayerOrder(loadedLayerOrder);
+    } else {
+        setProducts([]);
+        setLayerOrder(loadedLayerOrder);
+    }
+
     if (params.savedIconImageUrl) setIconImage(params.savedIconImageUrl);
 
     setShowLoadMenu(false); setCloudMessage({ text: '已成功套用樣板！', type: 'success' });
@@ -402,12 +480,20 @@ const App = () => {
     const boxes = hitBoxes.current;
     let clickedSomething = false;
 
+    // 若嚴格規範平台，僅允許點擊商品圖層
     if (!activeTheme.allowText) {
-        if (!lockedLayers.product && image && checkHit(x, y, boxes.product)) {
-            dragInfo.current = { isDragging: true, target: { type: 'product' }, startX: x, startY: y, initialOffset: productOffset };
-            setActiveLayer({ type: 'product' });
-        } else { setActiveLayer(null); }
-        return; 
+        const reversedOrder = [...layerOrder].reverse();
+        for (const layer of reversedOrder) {
+            if (layer.startsWith('prod_')) {
+                const prodBox = boxes.products[layer];
+                if (!lockedLayers[layer] && checkHit(x, y, prodBox)) {
+                    const prod = products.find(p => p.id === layer);
+                    dragInfo.current = { isDragging: true, target: { type: 'product', id: layer }, startX: x, startY: y, initialOffset: prod.offset };
+                    setActiveLayer({ type: 'product', id: layer }); return;
+                }
+            }
+        }
+        setActiveLayer(null); return; 
     }
 
     const reversedOrder = [...layerOrder].reverse();
@@ -431,9 +517,13 @@ const App = () => {
             }
             if (hitTag) break;
         }
-        if (layer === 'product' && !lockedLayers.product && image && checkHit(x, y, boxes.product)) {
-            dragInfo.current = { isDragging: true, target: { type: 'product' }, startX: x, startY: y, initialOffset: productOffset }; 
-            setActiveLayer({ type: 'product' }); clickedSomething = true; break;
+        if (layer.startsWith('prod_')) {
+            const prodBox = boxes.products[layer];
+            if (!lockedLayers[layer] && checkHit(x, y, prodBox)) {
+                const prod = products.find(p => p.id === layer);
+                dragInfo.current = { isDragging: true, target: { type: 'product', id: layer }, startX: x, startY: y, initialOffset: prod.offset }; 
+                setActiveLayer({ type: 'product', id: layer }); clickedSomething = true; break;
+            }
         }
         if (layer === 'deco' && !lockedLayers.deco && checkHit(x, y, boxes.deco)) {
             const key = boxes.deco.key;
@@ -469,7 +559,9 @@ const App = () => {
         else if (target.type === 'tag') {
             setTagOffsets(prev => { const next = [...prev]; next[target.index] = { x: newX, y: newY }; return next; });
         }
-        else if (target.type === 'product') setProductOffset({ x: newX, y: newY });
+        else if (target.type === 'product') {
+            setProducts(prev => prev.map(p => p.id === target.id ? { ...p, offset: { x: newX, y: newY } } : p));
+        }
         else if (target.type === 'deco') {
             setDecoOffsets(prev => ({ ...prev, [target.key]: { x: newX, y: newY } }));
         }
@@ -489,7 +581,9 @@ const App = () => {
             for (let i = 0; i < boxes.tags.length; i++) { if (checkHit(x, y, boxes.tags[i])) { hit = true; break; } }
             if (hit) { isHovering = true; break; }
         }
-        if (layer === 'product' && !lockedLayers.product && image && checkHit(x, y, boxes.product)) { isHovering = true; break; }
+        if (layer.startsWith('prod_')) {
+            if (!lockedLayers[layer] && checkHit(x, y, boxes.products[layer])) { isHovering = true; break; }
+        }
         if (layer === 'deco' && !lockedLayers.deco && checkHit(x, y, boxes.deco)) { isHovering = true; break; }
     }
 
@@ -508,27 +602,29 @@ const App = () => {
       if (e.shiftKey) {
           e.preventDefault();
           const delta = e.deltaY > 0 ? 5 : -5;
-          setRotations(prev => {
-              if (activeLayer.type === 'product' || activeLayer.type === 'title' || activeLayer.type === 'icon' || activeLayer.type === 'deco') {
-                  return { ...prev, [activeLayer.type]: (prev[activeLayer.type] || 0) + delta };
-              }
-              return prev;
-          });
+          if (activeLayer.type === 'product') {
+              setProducts(prev => prev.map(p => p.id === activeLayer.id ? { ...p, rotation: (p.rotation || 0) + delta } : p));
+          } else {
+              setRotations(prev => ({ ...prev, [activeLayer.type]: (prev[activeLayer.type] || 0) + delta }));
+          }
       }
   };
 
   const resetPositions = () => { 
       setTitleOffset({x: 0, y: 0}); setIconOffset({x: 150, y: -150}); 
-      setTagOffsets(tagOffsets.map(() => ({x: 0, y: 0}))); setProductOffset({x: 0, y: 0}); 
+      setTagOffsets(tagOffsets.map(() => ({x: 0, y: 0}))); 
+      setProducts(prev => prev.map(p => ({...p, offset: {x:0, y:0}, rotation: 0}))); 
       setDecoOffsets({ frame: {x:0, y:0}, bars: {x:0, y:0}, poly: {x:0, y:0}, cyber: {x:0, y:0}, premium: {x:0, y:0} });
-      setRotations({ product: 0, title: 0, icon: 0, deco: 0 });
-      setLayerOrder(['deco', 'product', 'tags', 'title', 'icon']);
+      setRotations({ title: 0, icon: 0, deco: 0 });
+      // 將所有圖層按預設順序排列，商品圖維持先來後到疊加
+      const prodIds = products.map(p => p.id);
+      setLayerOrder(['deco', ...prodIds, 'tags', 'title', 'icon']);
       setTimeout(() => saveHistorySnapshot(), 50);
   };
 
-  const toggleLock = (layerName) => {
-      setLockedLayers(p => ({...p, [layerName]: !p[layerName]}));
-      if (activeLayer?.type === layerName) setActiveLayer(null); 
+  const toggleLock = (layerId) => {
+      setLockedLayers(p => ({...p, [layerId]: !p[layerId]}));
+      if (activeLayer?.id === layerId || activeLayer?.type === layerId) setActiveLayer(null); 
   };
 
   // --- 畫布繪製邏輯 ---
@@ -539,9 +635,10 @@ const App = () => {
     const width = canvas.width;
     const height = canvas.height;
     
-    hitBoxes.current = { product: null, title: null, icon: null, tags: [], deco: null };
+    hitBoxes.current = { products: {}, title: null, icon: null, tags: [], deco: null };
 
     const loadImg = (src) => new Promise((resolve) => {
+        if(!src) return resolve(null);
         const img = new Image(); img.crossOrigin = "Anonymous"; 
         img.onload = () => resolve(img); img.onerror = () => resolve(null); 
         img.src = src;
@@ -555,7 +652,7 @@ const App = () => {
         
         drawFn(ctx, -w/2, -h/2, w, h);
 
-        const isActive = activeLayer?.type === layerType && (layerKey === undefined || activeLayer?.key === layerKey);
+        const isActive = activeLayer?.type === layerType && (layerKey === undefined || activeLayer?.key === layerKey || activeLayer?.id === layerKey);
         if (isActive) {
             ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 2; ctx.setLineDash([6, 6]);
             ctx.strokeRect(-w/2 - 5, -h/2 - 5, w + 10, h + 10); ctx.setLineDash([]);
@@ -570,7 +667,7 @@ const App = () => {
         const isMomoOrYahooMall = !THEMES[platform].allowText;
         const currentTemplate = isMomoOrYahooMall ? 'None' : template;
 
-        // 🎨 絕對底層 背景填充
+        // 🎨 背景層填充
         if (currentTemplate === 'CyberNeon') {
             ctx.fillStyle = cyberBgMode === 'dark' ? '#0f172a' : '#f0f4f8'; 
         } else if (currentTemplate === 'PremiumGold') {
@@ -580,10 +677,10 @@ const App = () => {
         }
         ctx.fillRect(0, 0, width, height);
 
-        const mImg = image ? await loadImg(image) : null;
+        // 預先載入所有需要的圖片
         const iImg = iconImage ? await loadImg(iconImage) : null;
-
-        // --- 提取圖層渲染模組 ---
+        const loadedProds = {};
+        for (const p of products) { loadedProds[p.id] = p.src ? await loadImg(p.src) : null; }
 
         const drawDecoLayer = () => {
             if (currentTemplate === 'LightSoft') {
@@ -606,8 +703,6 @@ const App = () => {
                      const grad = c.createLinearGradient(0, y, 0, y + h);
                      grad.addColorStop(0, 'rgba(255,255,255,0)'); grad.addColorStop(1, hexToRgba(primaryColor, 0.15));
                      c.fillStyle = grad; c.fillRect(x, y, w, h);
-                     
-                     // 把原本畫在 title 區的橫條也併入裝飾圖層
                      c.fillStyle = accentColor; c.fillRect(x, h - 30, w, 30);
                      c.fillStyle = primaryColor; c.fillRect(x, h - 45, w, 15);
                  }, 'deco', 'bars');
@@ -651,19 +746,20 @@ const App = () => {
             }
         };
 
-        const drawProductLayer = () => {
+        const drawProductLayer = (prod) => {
             let baseScale = 0.75; let baseYOffset = showTitle ? 20 : 0;
             if (currentTemplate === 'TechBright' || currentTemplate === 'CyberNeon') { baseScale = 0.65; baseYOffset = showTitle ? -20 : 0; }
 
-            const finalScale = baseScale * (productScale / 100);
+            const finalScale = baseScale * (prod.scale / 100);
+            const pImg = loadedProds[prod.id];
             const w = width * finalScale;
-            const h = (mImg && mImg.width) ? ((mImg.height / mImg.width) * w) : w;
-            const x = (width - w) / 2 + (currentTemplate === 'TechBright' ? 60 : 0) + productOffset.x;
-            const y = (height - h) / 2 + baseYOffset + productOffset.y;
+            const h = (pImg && pImg.width) ? ((pImg.height / pImg.width) * w) : w;
+            const x = (width - w) / 2 + (currentTemplate === 'TechBright' ? 60 : 0) + prod.offset.x;
+            const y = (height - h) / 2 + baseYOffset + prod.offset.y;
 
-            if (mImg) hitBoxes.current.product = { x, y, w, h };
+            if (pImg) hitBoxes.current.products[prod.id] = { x, y, w, h };
             
-            drawWithRotation(ctx, x, y, w, h, rotations.product, (c, dx, dy, dw, dh) => {
+            drawWithRotation(ctx, x, y, w, h, prod.rotation, (c, dx, dy, dw, dh) => {
                 if (currentTemplate === 'CyberNeon') {
                     const cx = dx + dw/2; const cy = dy + dh/2;
                     const radius = Math.max(dw, dh) * 0.7;
@@ -679,23 +775,18 @@ const App = () => {
                     c.beginPath(); c.arc(cx, cy, radius, 0, Math.PI * 2); c.fill();
                 }
 
-                if (mImg) { 
-                    if (removeBg) {
+                if (pImg) { 
+                    if (prod.shadow !== false && removeBg) {
                         if (currentTemplate === 'CyberNeon') {
                             c.shadowColor = primaryColor; c.shadowBlur = cyberBgMode === 'dark' ? 40 : 25; c.shadowOffsetY = 0;
                         } else {
                             c.shadowColor = 'rgba(0,0,0,0.08)'; c.shadowBlur = 30; c.shadowOffsetY = 15;
                         }
                     }
-                    c.drawImage(mImg, dx, dy, dw, dh); 
+                    c.drawImage(pImg, dx, dy, dw, dh); 
                     c.shadowBlur = 0; c.shadowOffsetY = 0; 
                 } 
-                else {
-                    c.fillStyle = '#f8fafc'; c.fillRect(dx, dy, dw, dh); c.strokeStyle = '#e2e8f0'; c.strokeRect(dx, dy, dw, dh);
-                    c.fillStyle = '#94a3b8'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = '20px sans-serif';
-                    c.fillText('請上傳商品圖', dx + dw/2, dy + dh/2); c.textBaseline = 'alphabetic'; c.textAlign = 'left';
-                }
-            }, 'product');
+            }, 'product', prod.id);
         };
 
         const drawTitleLayer = () => {
@@ -732,7 +823,7 @@ const App = () => {
             } else if (currentTemplate === 'TechBright') {
                 if (showLogo && (logoText || brandText)) {
                     const logoFontSize = 24 * actualBrandScale; const subFontSize = 16 * actualBrandScale;
-                    const baseX = 30; const baseY = 50 * Math.max(1, actualBrandScale);
+                    const baseX = 30; const baseY = 50 * actualBrandScale;
                     ctx.fillStyle = textColor; ctx.font = `900 ${logoFontSize}px "${titleFont}"`; ctx.fillText(logoText, baseX, baseY);
                     const logoMetrics = ctx.measureText(logoText);
                     const gap = logoText ? (10 * actualBrandScale) : 0; const pipeX = baseX + logoMetrics.width + gap;
@@ -742,22 +833,44 @@ const App = () => {
                 
                 if (showTitle) {
                     const fontSize = 28 * actualTextScale;
-                    ctx.font = `bold ${fontSize}px "${titleFont}"`;
-                    const tW = ctx.measureText(promoText).width; const tH = fontSize + 10;
-                    const finalTx = 170 + titleOffset.x; const finalTy = height - 40 + titleOffset.y;
+                    const subFontSize = 20 * actualTextScale;
                     
-                    drawWithRotation(ctx, finalTx, finalTy - tH + 5, Math.max(150, tW), tH + 30, rotations.title, (c, dx, dy, dw, dh) => {
-                        c.fillStyle = primaryColor; c.fillRect(dx, dy + 20, 150, 45);
-                        c.fillStyle = '#FFFFFF'; c.font = `bold ${20 * actualTextScale}px "${titleFont}"`; c.fillText(subTitleText, dx + 20, dy + 50);
-                        c.fillStyle = textColor; c.font = `bold ${fontSize}px "${titleFont}"`; c.textBaseline = 'alphabetic'; 
-                        c.fillText(promoText, dx + 170, dy + 45 + (fontSize/2));
+                    ctx.font = `bold ${fontSize}px "${titleFont}"`;
+                    const promoW = ctx.measureText(promoText).width; 
+                    
+                    ctx.font = `bold ${subFontSize}px "${titleFont}"`;
+                    const subW = ctx.measureText(subTitleText).width;
+
+                    const blockW = subW + (40 * actualTextScale); // 讓副標題底色塊跟著文字寬度與縮放比例改變
+                    const blockH = 45 * actualTextScale;
+                    const gap = 15 * actualTextScale;
+                    
+                    const totalW = blockW + gap + promoW;
+                    const totalH = Math.max(blockH, fontSize * 1.2);
+                    
+                    const finalTx = 40 + titleOffset.x;
+                    const finalTy = height - 60 - totalH/2 + titleOffset.y;
+                    
+                    drawWithRotation(ctx, finalTx, finalTy, totalW, totalH, rotations.title, (c, dx, dy, dw, dh) => {
+                        const centerY = dy + dh/2;
+                        c.fillStyle = primaryColor; c.fillRect(dx, centerY - blockH/2, blockW, blockH);
+                        
+                        c.fillStyle = '#FFFFFF'; c.font = `bold ${subFontSize}px "${titleFont}"`; 
+                        c.textAlign = 'center'; c.textBaseline = 'middle';
+                        c.fillText(subTitleText, dx + blockW/2, centerY);
+                        
+                        c.fillStyle = textColor; c.font = `bold ${fontSize}px "${titleFont}"`; 
+                        c.textAlign = 'left'; c.textBaseline = 'middle'; 
+                        c.fillText(promoText, dx + blockW + gap, centerY);
+                        
+                        c.textBaseline = 'alphabetic'; 
                     }, 'title');
-                    hitBoxes.current.title = { x: finalTx, y: finalTy - fontSize, w: Math.max(150, tW), h: tH + 10 };
+                    hitBoxes.current.title = { x: finalTx, y: finalTy, w: totalW, h: totalH };
                 }
             } else if (currentTemplate === 'CyberNeon') {
                 if (showLogo && (logoText || brandText)) {
                     const logoFontSize = 20 * actualBrandScale;
-                    const tx = 45; const ty = 50 * Math.max(1, actualBrandScale);
+                    const tx = 45 * actualBrandScale; const ty = 50 * actualBrandScale;
                     ctx.fillStyle = primaryColor; ctx.font = `italic 900 ${logoFontSize}px "${titleFont}"`;
                     ctx.shadowColor = primaryColor; ctx.shadowBlur = cyberBgMode === 'dark' ? 10 : 5;
                     ctx.fillText(`${logoText} ${brandText}`, tx, ty);
@@ -815,9 +928,9 @@ const App = () => {
 
             const tagHeight = (isPremium ? 35 : 45) * actualTagScale;
             let totalTagsWidth = 0;
-            ctx.font = `bold ${isPremium ? 16 : 20 * actualTagScale}px "${tagFont}"`;
+            ctx.font = `bold ${(isPremium ? 16 : 20) * actualTagScale}px "${tagFont}"`;
             const tagPaddings = [];
-            tags.forEach(tag => { const tw = ctx.measureText(tag).width + (isPremium ? 30 : 40 * actualTagScale); totalTagsWidth += tw + 15; tagPaddings.push(tw); });
+            tags.forEach(tag => { const tw = ctx.measureText(tag).width + ((isPremium ? 30 : 40) * actualTagScale); totalTagsWidth += tw + 15; tagPaddings.push(tw); });
             totalTagsWidth -= 15;
 
             let startX = (width - totalTagsWidth) / 2;
@@ -866,18 +979,32 @@ const App = () => {
         // --- 根據動態 layerOrder 順序繪製 ---
         layerOrder.forEach(layer => {
              if (layer === 'deco') drawDecoLayer();
-             else if (layer === 'product') drawProductLayer();
+             else if (layer.startsWith('prod_')) {
+                 const p = products.find(prod => prod.id === layer);
+                 if (p) drawProductLayer(p);
+             }
              else if (layer === 'title') drawTitleLayer();
              else if (layer === 'tags') drawTagsLayer();
              else if (layer === 'icon') drawIconLayer();
         });
 
-        // 浮水印 (最上層)
+        // 若無商品，繪製佔位符
+        if (products.length === 0 && !isMomoOrYahooMall) {
+            let baseScale = 0.75; let baseYOffset = showTitle ? 20 : 0;
+            if (currentTemplate === 'TechBright' || currentTemplate === 'CyberNeon') { baseScale = 0.65; baseYOffset = showTitle ? -20 : 0; }
+            const pw = width * baseScale; const ph = pw;
+            const px = (width - pw) / 2 + (currentTemplate === 'TechBright' ? 60 : 0);
+            const py = (height - ph) / 2 + baseYOffset;
+
+            ctx.fillStyle = '#f8fafc'; ctx.fillRect(px, py, pw, ph); ctx.strokeStyle = '#e2e8f0'; ctx.strokeRect(px, py, pw, ph);
+            ctx.fillStyle = '#94a3b8'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '20px sans-serif';
+            ctx.fillText('請上傳商品圖', px + pw/2, py + ph/2); ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
+        }
+
         if (isAiDisclosure) {
           ctx.fillStyle = 'rgba(150, 150, 150, 0.6)'; ctx.font = '11px Arial'; ctx.fillText('AI Generated', width - 85, 20);
         }
         
-        // 智慧輔助線 (最上層)
         if (guideLines.active) {
             ctx.strokeStyle = '#f472b6'; ctx.lineWidth = 1; ctx.setLineDash([5, 5]);
             if (guideLines.x) { ctx.beginPath(); ctx.moveTo(width/2, 0); ctx.lineTo(width/2, height); ctx.stroke(); }
@@ -886,7 +1013,7 @@ const App = () => {
         }
     };
     renderCanvas();
-  }, [image, iconImage, platform, template, promoText, subTitleText, tagsInput, brandText, logoText, isAiDisclosure, removeBg, primaryColor, accentColor, textColor, productScale, brandScale, textScale, tagScale, tagShape, showLogo, showTitle, showTags, titleFont, tagFont, iconScale, titleOffset, iconOffset, tagOffsets, productOffset, decoOffsets, activeLayer, rotations, guideLines, cyberBgMode, layerOrder, tagCustomColors]);
+  }, [products, iconImage, platform, template, promoText, subTitleText, tagsInput, brandText, logoText, isAiDisclosure, removeBg, primaryColor, accentColor, textColor, productScale, brandScale, textScale, tagScale, tagShape, showLogo, showTitle, showTags, titleFont, tagFont, iconScale, titleOffset, iconOffset, tagOffsets, decoOffsets, activeLayer, rotations, guideLines, cyberBgMode, layerOrder, tagCustomColors]);
 
   const complianceResult = checkCompliance(promoText + tagsInput);
 
@@ -904,7 +1031,7 @@ const App = () => {
                 <ImageIcon className="w-6 h-6 text-white" />
                 馬尼製圖工廠 
                 <span className="text-[10px] bg-white text-slate-900 px-2 py-0.5 rounded-full ml-2 font-black shadow-sm flex items-center gap-1">
-                    <Layers className="w-3 h-3 text-sky-500" /> 圖層編輯大師
+                    <Layers className="w-3 h-3 text-sky-500" /> 多圖層編輯大師
                 </span>
               </h1>
               
@@ -928,10 +1055,10 @@ const App = () => {
                     <div className="flex justify-between items-center mb-5">
                         <h3 className="font-black text-lg text-slate-800 flex items-center gap-2">
                             <Sliders className="w-5 h-5 text-sky-500" />
-                            {getLayerName(activeLayer.type)} 設定
+                            {getLayerName(activeLayer.type, activeLayer.id)} 設定
                         </h3>
-                        <button onClick={() => toggleLock(activeLayer.type)} className={`p-1.5 rounded-md border transition-colors ${lockedLayers[activeLayer.type] ? 'bg-red-50 border-red-200 text-red-500' : 'bg-slate-50 border-slate-200 text-slate-400 hover:text-slate-600'}`} title="鎖定此圖層">
-                            {lockedLayers[activeLayer.type] ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
+                        <button onClick={() => toggleLock(activeLayer.id || activeLayer.type)} className={`p-1.5 rounded-md border transition-colors ${lockedLayers[activeLayer.id || activeLayer.type] ? 'bg-red-50 border-red-200 text-red-500' : 'bg-slate-50 border-slate-200 text-slate-400 hover:text-slate-600'}`} title="鎖定此圖層">
+                            {lockedLayers[activeLayer.id || activeLayer.type] ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
                         </button>
                     </div>
 
@@ -939,25 +1066,47 @@ const App = () => {
                     <div className="mb-6 bg-slate-50 p-3 rounded-lg border border-slate-100">
                         <p className="text-xs font-bold text-slate-500 mb-2 flex items-center gap-1"><Layers className="w-3 h-3"/> 圖層上下排序</p>
                         <div className="flex gap-2">
-                            <button className="flex-1 bg-white border border-slate-200 rounded text-xs font-bold py-2 hover:border-sky-300 hover:text-sky-600 transition-colors shadow-sm disabled:opacity-30 disabled:cursor-not-allowed" disabled={layerOrder.indexOf(activeLayer.type) === layerOrder.length - 1} onClick={() => moveLayerUp(activeLayer.type)}>⬆️ 上移一層</button>
-                            <button className="flex-1 bg-white border border-slate-200 rounded text-xs font-bold py-2 hover:border-sky-300 hover:text-sky-600 transition-colors shadow-sm disabled:opacity-30 disabled:cursor-not-allowed" disabled={layerOrder.indexOf(activeLayer.type) === 0} onClick={() => moveLayerDown(activeLayer.type)}>⬇️ 下移一層</button>
+                            <button className="flex-1 bg-white border border-slate-200 rounded text-xs font-bold py-2 hover:border-sky-300 hover:text-sky-600 transition-colors shadow-sm disabled:opacity-30 disabled:cursor-not-allowed" 
+                                    disabled={layerOrder.indexOf(activeLayer.id || activeLayer.type) === layerOrder.length - 1} 
+                                    onClick={() => moveLayerUp(activeLayer.id || activeLayer.type)}>⬆️ 上移一層</button>
+                            <button className="flex-1 bg-white border border-slate-200 rounded text-xs font-bold py-2 hover:border-sky-300 hover:text-sky-600 transition-colors shadow-sm disabled:opacity-30 disabled:cursor-not-allowed" 
+                                    disabled={layerOrder.indexOf(activeLayer.id || activeLayer.type) === 0} 
+                                    onClick={() => moveLayerDown(activeLayer.id || activeLayer.type)}>⬇️ 下移一層</button>
                         </div>
                     </div>
 
                     {/* 各圖層專屬設定參數 */}
                     <div className="space-y-5">
-                        {activeLayer.type === 'product' && (
-                            <>
-                                <div>
-                                    <label className="text-xs font-bold text-slate-500 flex items-center gap-1 mb-2"><Camera className="w-3 h-3" /> 商品主體縮放 ({productScale}%)</label>
-                                    <input type="range" value={productScale} onChange={(e) => setProductScale(e.target.value)} onMouseUp={saveHistorySnapshot} min="50" max="150" className="w-full accent-slate-400" />
-                                </div>
-                                <div className="p-3 bg-slate-50 rounded border border-slate-100 flex items-center gap-2">
-                                    <input type="checkbox" checked={removeBg} onChange={(e) => {setRemoveBg(e.target.checked); saveHistorySnapshot();}} id="ctx-remove-bg" className="accent-slate-500 w-4 h-4 rounded cursor-pointer" />
-                                    <label htmlFor="ctx-remove-bg" className="text-xs font-bold text-slate-700 cursor-pointer">顯示立體光影與陰影</label>
-                                </div>
-                            </>
-                        )}
+                        {activeLayer.type === 'product' && (() => {
+                            const prod = products.find(p => p.id === activeLayer.id);
+                            if (!prod) return null;
+                            return (
+                                <>
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-500 flex items-center gap-1 mb-2"><Camera className="w-3 h-3" /> 商品主體縮放 ({prod.scale}%)</label>
+                                        <input type="range" value={prod.scale} onChange={(e) => setProducts(prev => prev.map(p => p.id === prod.id ? {...p, scale: parseInt(e.target.value)} : p))} onMouseUp={saveHistorySnapshot} min="10" max="250" className="w-full accent-slate-400" />
+                                    </div>
+                                    <div className="p-3 bg-slate-50 rounded border border-slate-100 flex items-center gap-2">
+                                        <input type="checkbox" checked={prod.shadow !== false} onChange={(e) => {setProducts(prev => prev.map(p => p.id === prod.id ? {...p, shadow: e.target.checked} : p)); saveHistorySnapshot();}} id="ctx-shadow" className="accent-slate-500 w-4 h-4 rounded cursor-pointer" />
+                                        <label htmlFor="ctx-shadow" className="text-xs font-bold text-slate-700 cursor-pointer">顯示此圖的立體光影/陰影</label>
+                                    </div>
+                                    {!prod.isRemovingBg && enableRemoveBgApi && removeBgApiKey && (
+                                         <button onClick={() => executeRemoveBg(prod.id, prod.rawSrc)} className="w-full mt-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold py-2 rounded-lg transition-colors shadow-sm">
+                                             ✨ 重新 AI 去背此圖
+                                         </button>
+                                    )}
+                                    <button onClick={() => {
+                                        setProducts(prev => prev.filter(p => p.id !== prod.id));
+                                        setLayerOrder(prev => prev.filter(l => l !== prod.id));
+                                        setActiveLayer(null);
+                                        saveHistorySnapshot();
+                                    }} className="w-full mt-2 bg-red-50 text-red-500 hover:bg-red-100 font-bold text-sm py-2 rounded-lg border border-red-200 transition-colors">
+                                        🗑️ 刪除此商品圖
+                                    </button>
+                                </>
+                            );
+                        })()}
+                        
                         {activeLayer.type === 'title' && (
                             <>
                                 <div>
@@ -1048,11 +1197,27 @@ const App = () => {
             </div>
         ) : (
         <div className="flex-1 overflow-y-auto p-5 space-y-6 custom-scrollbar pb-28">
+          
+          <div className="bg-sky-50 border border-sky-200 p-3 rounded-xl shadow-sm text-xs text-sky-800 flex items-start gap-3">
+              <MousePointer2 className="w-5 h-5 text-sky-500 shrink-0 mt-0.5" />
+              <div className="w-full">
+                  <div className="flex justify-between items-center mb-1.5">
+                      <p className="font-bold">✨ 旗艦編輯器新功能解鎖：</p>
+                      <button onClick={() => setShowHelpModal(true)} className="text-[10px] bg-sky-200 hover:bg-sky-300 text-sky-800 font-bold px-2 py-1 rounded transition-colors">查看完整秘笈</button>
+                  </div>
+                  <ul className="list-disc pl-4 space-y-0.5 opacity-90">
+                      <li>點擊畫布圖層即可選取，使用鍵盤 <kbd className="bg-white px-1 rounded shadow-sm text-slate-600">方向鍵</kbd> 精準微調。</li>
+                      <li>停留在物件上按住 <kbd className="bg-white px-1 rounded shadow-sm text-slate-600">Shift + 滾輪</kbd> 可進行旋轉。</li>
+                      <li><span className="font-bold text-sky-600">NEW!</span> 支援多圖上傳，點選圖片可獨立設定層級與大小。</li>
+                  </ul>
+              </div>
+          </div>
+
           {/* 圖片上傳區 */}
           <section className="bg-slate-50 p-4 rounded-xl border border-slate-100">
             <div className="flex justify-between items-center mb-3">
                 <label className="text-sm font-bold flex items-center gap-2 text-slate-700">
-                    <Camera className="w-4 h-4" style={{ color: activeTheme.main }} /> 1. 原廠商品圖
+                    <Camera className="w-4 h-4" style={{ color: activeTheme.main }} /> 1. 原廠商品圖 <span className="text-[10px] text-slate-400 font-normal">(支援多圖)</span>
                 </label>
             </div>
 
@@ -1077,16 +1242,11 @@ const App = () => {
                         />
                     </div>
                     <div className="flex items-center justify-between mt-2 ml-6">
-                        <p className="text-[10px] text-purple-500">設定後將自動記憶。開啟此功能時，上傳新圖會自動呼叫 API 去背。</p>
+                        <p className="text-[10px] text-purple-500">設定後將自動記憶，每次上傳新圖會自動呼叫 API 去背。</p>
                         <span className="text-[10px] font-bold text-purple-700 bg-purple-200 px-2 py-0.5 rounded-full shadow-sm">
                             本月已去背: {bgRemovalCount} 次
                         </span>
                     </div>
-                    {rawImage && !isRemovingBg && (
-                         <button onClick={() => executeRemoveBg(rawImage)} className="mt-2 w-full bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold py-1.5 rounded transition-colors">
-                             ✨ 立即為目前圖片去背
-                         </button>
-                    )}
                 </div>
             )}
 
@@ -1097,22 +1257,36 @@ const App = () => {
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
             >
-              {isRemovingBg && (
-                  <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center">
-                      <Loader2 className="w-6 h-6 text-purple-600 animate-spin mb-2" />
-                      <p className="text-xs font-bold text-purple-800">🚀 正在呼叫 AI 高精度去背...</p>
-                  </div>
-              )}
-              <input type="file" onChange={handleImageUpload} className="hidden" id="img-upload" accept="image/*" />
+              <input type="file" multiple onChange={handleImageUpload} className="hidden" id="img-upload" accept="image/*" />
               <label htmlFor="img-upload" className="cursor-pointer block pointer-events-none">
                 <div className="bg-white shadow-sm border border-slate-100 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
-                  <Camera className="w-5 h-5" style={{ color: activeTheme.main }} />
+                  <ImagePlus className="w-5 h-5" style={{ color: activeTheme.main }} />
                 </div>
                 <span className="text-sm font-bold" style={{ color: activeTheme.main }}>
-                  {isDragActive ? '放開以載入圖片' : '點擊或將圖片拖放至此'}
+                  {isDragActive ? '放開以載入圖片' : '點擊選擇多張圖片或直接拖放至此'}
                 </span>
-                <p className="text-[10px] text-slate-400 mt-1">載入後可於畫布上點擊商品進行精細設定</p>
+                <p className="text-[10px] text-slate-400 mt-1">支援上傳多個商品，並獨立進行去背與排版</p>
               </label>
+            </div>
+            
+            {/* 多圖縮圖預覽列 */}
+            {products.length > 0 && (
+                <div className="mt-4 flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
+                   {products.map((p, idx) => (
+                      <div key={p.id} 
+                           onClick={() => setActiveLayer({type: 'product', id: p.id})}
+                           className={`relative w-14 h-14 border-2 rounded-lg cursor-pointer flex-shrink-0 transition-all ${activeLayer?.id === p.id ? 'border-sky-500 shadow-md' : 'border-slate-200 opacity-70 hover:opacity-100'}`}>
+                         <img src={p.src} className="w-full h-full object-contain rounded-md bg-white" />
+                         {p.isRemovingBg && <div className="absolute inset-0 bg-white/60 flex items-center justify-center rounded-md"><Loader2 className="w-4 h-4 animate-spin text-purple-500" /></div>}
+                         <span className="absolute -bottom-2 -right-2 bg-slate-800 text-white text-[8px] px-1.5 py-0.5 rounded-full shadow">{idx+1}</span>
+                      </div>
+                   ))}
+                </div>
+            )}
+
+            <div className="mt-3 flex items-center gap-2 pl-1 bg-white p-2 rounded-lg border border-slate-200">
+                <input type="checkbox" checked={removeBg} onChange={(e) => {setRemoveBg(e.target.checked); saveHistorySnapshot();}} id="remove-bg" className="accent-slate-500 rounded w-4 h-4 cursor-pointer" />
+                <label htmlFor="remove-bg" className="text-xs text-slate-700 font-bold cursor-pointer">全域光影開關 (建議去背後開啟)</label>
             </div>
           </section>
 
@@ -1375,8 +1549,8 @@ const App = () => {
                 <h4 className="font-bold text-sky-600 flex items-center gap-1.5 border-b border-sky-100 pb-2"><MousePointer2 className="w-4 h-4" /> 基礎滑鼠操作</h4>
                 <ul className="space-y-3 text-sm text-slate-600">
                   <li className="flex flex-col gap-1">
-                      <span className="font-black text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded text-xs w-max">左鍵點擊圖層</span> 
-                      <span>左側面板將<b className="text-sky-600">智慧切換</b>為該圖層專屬的編輯選項。</span>
+                      <span className="font-black text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded text-xs w-max">多圖層選擇與編輯</span> 
+                      <span>可上傳多張圖片，<b className="text-sky-600">點選不同圖片</b>即可單獨修改大小、層級、位置與陰影。</span>
                   </li>
                   <li className="flex flex-col gap-1">
                       <span className="font-black text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded text-xs w-max">Shift + 滾動滑鼠滾輪</span> 
