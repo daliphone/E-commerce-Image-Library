@@ -55,15 +55,22 @@ const PLATFORMS = {
 };
 const BANNED_WORDS = ['第一','最強','最優','療效','根治','殺頭價','保證見效'];
 
-// ─── 文字樣式預設（每個文字元素都有這些屬性）────────────────────────────────
+// ─── 文字樣式預設 ─────────────────────────────────────────────────────────────
+// outlineStyle: 'none'|'simple'（單層貼紙）|'double'（雙層描邊）|'shadow'（陰影底）
 const defaultTextStyle = () => ({
-  color: '',          // 空字串 = 使用模板預設色
+  color: '',
   bold: true,
   italic: false,
-  outline: false,     // 是否開啟描邊加框
+  outlineStyle: 'none',
   outlineColor: '#ffffff',
-  outlineWidth: 6,    // px（canvas 實際值）
-  scale: 100,         // 獨立縮放 %
+  outlineWidth: 8,
+  outlineColor2: '#333333',
+  outlineWidth2: 3,
+  shadowColor: '#000000',
+  shadowBlurAmount: 0,
+  shadowOffsetX: 3,
+  shadowOffsetY: 3,
+  scale: 100,
 });
 
 // ─── 工具 ─────────────────────────────────────────────────────────────────────
@@ -81,20 +88,51 @@ const rr = (ctx, x, y, w, h, r, stroke=false) => {
   stroke ? ctx.stroke() : ctx.fill();
 };
 
-// ─── 帶描邊加框的文字繪製工具 ────────────────────────────────────────────────
-function drawStyledText(ctx, text, x, y, style, fallbackColor, fontSize, font) {
-  if (!text) return;
-  const color = style.color || fallbackColor;
-  const fontStr = `${style.italic?'italic ':''} ${style.bold?'900 ':'400 '}${fontSize}px "${font}"`;
+// ─── 帶描邊加框的文字繪製工具（正確順序：先粗描邊 → 再細描邊 → 最後填色）────
+// 關鍵：strokeText 的 lineWidth 向內外各延伸一半。
+// 先畫描邊，再畫 fillText 蓋住內側一半，描邊就完美貼著字形向外擴展。
+function applyTextOutline(ctx, text, x, y, style, fillColor, fontStr, align) {
+  ctx.save();
   ctx.font = fontStr;
-  if (style.outline && style.outlineWidth > 0) {
+  ctx.textAlign = align || 'left';
+  ctx.textBaseline = ctx.textBaseline || 'alphabetic';
+  ctx.lineJoin = 'round';
+  ctx.miterLimit = 2;
+
+  const mode = style.outlineStyle || 'none';
+
+  if (mode === 'shadow') {
+    // 陰影底色模式：加 drop shadow，不畫描邊
+    ctx.shadowColor = style.shadowColor || '#000000';
+    ctx.shadowBlur = style.shadowBlurAmount || 0;
+    ctx.shadowOffsetX = style.shadowOffsetX || 3;
+    ctx.shadowOffsetY = style.shadowOffsetY || 3;
+    ctx.fillStyle = fillColor;
+    ctx.fillText(text, x, y);
+    ctx.shadowColor = 'transparent';
+  } else if (mode === 'simple') {
+    // 單層貼紙：粗描邊 → 文字填色
     ctx.strokeStyle = style.outlineColor || '#ffffff';
-    ctx.lineWidth = style.outlineWidth;
-    ctx.lineJoin = 'round';
+    ctx.lineWidth = (style.outlineWidth || 8) * 2; // *2 因為一半會被 fill 蓋住
     ctx.strokeText(text, x, y);
+    ctx.fillStyle = fillColor;
+    ctx.fillText(text, x, y);
+  } else if (mode === 'double') {
+    // 雙層描邊：先畫寬外框 → 再畫窄內框 → 最後填色
+    ctx.strokeStyle = style.outlineColor || '#ffffff';
+    ctx.lineWidth = ((style.outlineWidth || 8) + (style.outlineWidth2 || 3)) * 2;
+    ctx.strokeText(text, x, y);
+    ctx.strokeStyle = style.outlineColor2 || '#333333';
+    ctx.lineWidth = (style.outlineWidth2 || 3) * 2;
+    ctx.strokeText(text, x, y);
+    ctx.fillStyle = fillColor;
+    ctx.fillText(text, x, y);
+  } else {
+    // none：只畫填色
+    ctx.fillStyle = fillColor;
+    ctx.fillText(text, x, y);
   }
-  ctx.fillStyle = color;
-  ctx.fillText(text, x, y);
+  ctx.restore();
 }
 
 // ─── 背景繪製（14 組）────────────────────────────────────────────────────────
@@ -229,14 +267,14 @@ function drawTagLayer(ctx, W, H, tid, tpl, opts) {
       rr(ctx,tx,ty,tw,tagH,radius,true); ctx.shadowBlur=0;
       // text color uses style.color or tag color
       const tcolor = style.color || col;
-      if(style.outline){ ctx.strokeStyle=style.outlineColor||'#fff'; ctx.lineWidth=style.outlineWidth||4; ctx.lineJoin='round'; ctx.font=fontStr; ctx.strokeText(tag,tx+tw/2,ty+tagH*.52); }
-      ctx.fillStyle=tcolor; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(tag,tx+tw/2,ty+tagH*.52);
+      ctx.textBaseline='middle'; ctx.textAlign='center';
+      applyTextOutline(ctx,tag,tx+tw/2,ty+tagH*.52,style,tcolor,fontStr,'center');
     } else {
       if(['gaming_a','gaming_b'].includes(tid)){ctx.shadowColor=col;ctx.shadowBlur=12;}
       ctx.fillStyle=col; rr(ctx,tx,ty,tw,tagH,radius); ctx.shadowBlur=0;
       const tcolor = style.color || '#ffffff';
-      if(style.outline){ ctx.strokeStyle=style.outlineColor||'#333'; ctx.lineWidth=style.outlineWidth||4; ctx.lineJoin='round'; ctx.font=fontStr; ctx.strokeText(tag,tx+tw/2,ty+tagH*.52); }
-      ctx.fillStyle=tcolor; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(tag,tx+tw/2,ty+tagH*.52);
+      ctx.textBaseline='middle'; ctx.textAlign='center';
+      applyTextOutline(ctx,tag,tx+tw/2,ty+tagH*.52,style,tcolor,fontStr,'center');
     }
     ctx.textBaseline='alphabetic'; ctx.textAlign='left';
     hbs.push({x:tx,y:ty,w:tw,h:tagH}); sx+=tw+gap;
@@ -519,10 +557,11 @@ export default function App() {
           cx=42+logoOffset.x; cy=50*bs+logoOffset.y;
           const hitX=cx, hitY=cy-sz, hitW=tw+20, hitH=sz+10;
           withSel('logo',undefined,hitX,hitY,hitW,hitH,rotations.logo,(c,dx,dy,dw,dh)=>{
-            const bgColor=logoStyle.color||fallbackBg;
-            c.fillStyle=bgColor; c.shadowColor=bgColor; c.shadowBlur=8;
-            if(logoStyle.outline){c.strokeStyle=logoStyle.outlineColor||'#fff';c.lineWidth=logoStyle.outlineWidth||4;c.lineJoin='round';c.font=fontStr;c.strokeText(logoText,dx+dw/2,dy+dh*.75);}
-            c.fillText(logoText,dx+dw/2,dy+dh*.75); c.shadowBlur=0;
+            const fillCol=logoStyle.color||fallbackBg;
+            c.shadowColor=fillCol; c.shadowBlur=8;
+            c.textBaseline='middle'; c.textAlign='center';
+            applyTextOutline(c,logoText,dx+dw/2,dy+dh/2,logoStyle,fillCol,fontStr,'center');
+            c.shadowBlur=0; c.textBaseline='alphabetic'; c.textAlign='left';
           });
           hb.current.logo={x:hitX,y:hitY,w:hitW,h:hitH};
         } else {
@@ -530,11 +569,9 @@ export default function App() {
           withSel('logo',undefined,bx,by,pw,ph,rotations.logo,(c,dx,dy,dw,dh)=>{
             const bgColor=logoStyle.color||fallbackBg;
             c.fillStyle=bgColor; rr(c,dx,dy,dw,dh,r);
-            // text
-            const tColor=fallbackText;
-            c.font=fontStr;
-            if(logoStyle.outline){c.strokeStyle=logoStyle.outlineColor||'rgba(0,0,0,0.4)';c.lineWidth=logoStyle.outlineWidth||3;c.lineJoin='round';c.strokeText(logoText,dx+dw/2,dy+dh*.65);}
-            c.fillStyle=tColor; c.textAlign='center'; c.textBaseline='middle'; c.fillText(logoText,dx+dw/2,dy+dh/2); c.textBaseline='alphabetic'; c.textAlign='left';
+            c.textBaseline='middle'; c.textAlign='center';
+            applyTextOutline(c,logoText,dx+dw/2,dy+dh/2,logoStyle,fallbackText,fontStr,'center');
+            c.textBaseline='alphabetic'; c.textAlign='left';
           });
           hb.current.logo={x:bx,y:by,w:pw,h:ph};
         }
@@ -557,8 +594,9 @@ export default function App() {
           const bgColor=brandStyle.color||h2r(tpl.primary,.25);
           c.fillStyle=bgColor; rr(c,dx,dy,dw,dh,rr2);
           const tColor = brandStyle.color ? '#ffffff' : (isDark?'#ffffff':tpl.primary);
-          if(brandStyle.outline){c.strokeStyle=brandStyle.outlineColor||'#fff';c.lineWidth=brandStyle.outlineWidth||3;c.lineJoin='round';c.font=fontStr;c.strokeText(brandText,dx+dw/2,dy+dh*.7);}
-          c.fillStyle=tColor; c.textAlign='center'; c.textBaseline='middle'; c.fillText(brandText,dx+dw/2,dy+dh/2); c.textBaseline='alphabetic'; c.textAlign='left';
+          c.textBaseline='middle'; c.textAlign='center';
+          applyTextOutline(c,brandText,dx+dw/2,dy+dh/2,brandStyle,tColor,fontStr,'center');
+          c.textBaseline='alphabetic'; c.textAlign='left';
         });
         hb.current.brand={x:bx,y:by,w:pw,h:ph};
       };
@@ -577,25 +615,38 @@ export default function App() {
 
         withSel('title',undefined,bx,by,tw,th,rotations.title,(c,dx,dy,dw,dh)=>{
           const fallbackCol=isDark?'#ffffff':tpl.textCol;
-          const tColor=titleStyle.color||fallbackCol;
-          c.font=fontStr;
-          if(titleStyle.outline){
-            c.strokeStyle=titleStyle.outlineColor||'#ffffff';
-            c.lineWidth=titleStyle.outlineWidth||8;
-            c.lineJoin='round';
-            c.textAlign=(templateId==='accessory_a')?'left':'center';
-            c.textBaseline='middle';
-            c.strokeText(promoText,dx+(templateId==='accessory_a'?0:dw/2),dy+dh/2);
-          }
+          const titleAlign=(templateId==='accessory_a')?'left':'center';
+          const titleX=dx+(templateId==='accessory_a'?0:dw/2), titleY=dy+dh/2;
+          // 暗色模板且未自訂顏色時，用漸層填色
+          let fillCol=titleStyle.color||fallbackCol;
           if(isDark&&!titleStyle.color){
             const tg=c.createLinearGradient(0,dy,0,dy+dh);
-            tg.addColorStop(0,'#fff'); tg.addColorStop(1,h2r(tpl.accent,.85)); c.fillStyle=tg;
+            tg.addColorStop(0,'#fff'); tg.addColorStop(1,h2r(tpl.accent,.85));
+            // 暫存 fillStyle 物件，applyTextOutline 直接用 fillCol 字串無法傳漸層
+            // 解法：先畫描邊（如有），再手動畫漸層 fill
+            c.save(); c.font=fontStr; c.lineJoin='round'; c.miterLimit=2;
+            const mode=titleStyle.outlineStyle||'none';
+            if(mode==='simple'){
+              c.strokeStyle=titleStyle.outlineColor||'#ffffff'; c.lineWidth=(titleStyle.outlineWidth||8)*2;
+              c.textAlign=titleAlign; c.textBaseline='middle'; c.strokeText(promoText,titleX,titleY);
+            } else if(mode==='double'){
+              c.strokeStyle=titleStyle.outlineColor||'#ffffff'; c.lineWidth=((titleStyle.outlineWidth||8)+(titleStyle.outlineWidth2||3))*2;
+              c.textAlign=titleAlign; c.textBaseline='middle'; c.strokeText(promoText,titleX,titleY);
+              c.strokeStyle=titleStyle.outlineColor2||'#333333'; c.lineWidth=(titleStyle.outlineWidth2||3)*2;
+              c.strokeText(promoText,titleX,titleY);
+            } else if(mode==='shadow'){
+              c.shadowColor=titleStyle.shadowColor||'#000'; c.shadowBlur=titleStyle.shadowBlurAmount||0;
+              c.shadowOffsetX=titleStyle.shadowOffsetX||3; c.shadowOffsetY=titleStyle.shadowOffsetY||3;
+            }
+            c.fillStyle=tg; c.textAlign=titleAlign; c.textBaseline='middle';
             if(isGaming){c.shadowColor=tpl.accent;c.shadowBlur=12;}
-          } else { c.fillStyle=tColor; }
-          c.textAlign=(templateId==='accessory_a')?'left':'center';
-          c.textBaseline='middle';
-          c.fillText(promoText,dx+(templateId==='accessory_a'?0:dw/2),dy+dh/2);
-          c.shadowBlur=0; c.textBaseline='alphabetic'; c.textAlign='left';
+            c.fillText(promoText,titleX,titleY);
+            c.shadowBlur=0; c.shadowColor='transparent'; c.restore();
+          } else {
+            c.textBaseline='middle'; c.textAlign=titleAlign;
+            applyTextOutline(c,promoText,titleX,titleY,titleStyle,fillCol,fontStr,titleAlign);
+          }
+          c.textBaseline='alphabetic'; c.textAlign='left';
         });
         hb.current.title={x:bx,y:by,w:tw,h:th};
       };
@@ -759,44 +810,104 @@ export default function App() {
   const catTpls=CATEGORIES[activeCategory].templates;
   const alid=activeLayer?.id||activeLayer?.type;
 
-  // ── 文字樣式編輯器子元件 ──
-  const TextStyleEditor=({label,style,setStyle})=>(
-    <div style={{background:'#f8fafc',borderRadius:8,padding:'10px 10px',border:'1px solid #e2e8f0',marginTop:6}}>
-      <div style={{fontSize:9,fontWeight:800,color:'#64748b',marginBottom:7,textTransform:'uppercase',letterSpacing:.5}}>{label} 文字樣式</div>
-      <div style={{display:'flex',gap:6,marginBottom:7,alignItems:'center'}}>
-        {/* 顏色 */}
-        <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
-          <input type="color" value={style.color||'#ffffff'} onChange={e=>setStyle(s=>({...s,color:e.target.value}))} onBlur={saveSnap} style={{width:30,height:30,borderRadius:6,border:'2px solid #e2e8f0',padding:2,cursor:'pointer'}} />
-          <span style={{fontSize:8,color:'#94a3b8'}}>顏色</span>
-        </div>
-        {/* 縮放 */}
-        <div style={{flex:1}}>
-          <div style={{fontSize:9,color:'#64748b',marginBottom:2}}>個別縮放 {style.scale||100}%</div>
-          <input type="range" min={50} max={300} value={style.scale||100} onChange={e=>setStyle(s=>({...s,scale:Number(e.target.value)}))} onMouseUp={saveSnap} style={{width:'100%',accentColor:tpl.primary}} />
-        </div>
-      </div>
-      <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
-        {/* 粗體 */}
-        <ToggleChip active={style.bold} onClick={()=>{setStyle(s=>({...s,bold:!s.bold}));saveSnap();}}>B 粗體</ToggleChip>
-        {/* 斜體 */}
-        <ToggleChip active={style.italic} onClick={()=>{setStyle(s=>({...s,italic:!s.italic}));saveSnap();}}>I 斜體</ToggleChip>
-        {/* 描邊開關 */}
-        <ToggleChip active={style.outline} onClick={()=>{setStyle(s=>({...s,outline:!s.outline}));saveSnap();}}>✏️ 加框</ToggleChip>
-      </div>
-      {style.outline&&(
-        <div style={{marginTop:8,display:'flex',gap:8,alignItems:'center',background:'#fff',padding:'7px 8px',borderRadius:7,border:'1px solid #e2e8f0'}}>
-          <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
-            <input type="color" value={style.outlineColor||'#ffffff'} onChange={e=>setStyle(s=>({...s,outlineColor:e.target.value}))} onBlur={saveSnap} style={{width:28,height:28,borderRadius:6,border:'2px solid #e2e8f0',padding:2,cursor:'pointer'}} />
-            <span style={{fontSize:8,color:'#94a3b8'}}>框色</span>
+  // ── 文字樣式編輯器子元件（4 種加框效果）──
+  const TextStyleEditor=({label,style,setStyle})=>{
+    const mode=style.outlineStyle||'none';
+    const MODES=[
+      {id:'none',    icon:'A',  label:'無框'},
+      {id:'simple',  icon:'A̲',  label:'貼紙框'},
+      {id:'double',  icon:'Ã',  label:'雙層框'},
+      {id:'shadow',  icon:'Å',  label:'陰影底'},
+    ];
+    return(
+      <div style={{background:'#f8fafc',borderRadius:8,padding:'10px',border:'1px solid #e2e8f0',marginTop:6}}>
+        <div style={{fontSize:9,fontWeight:800,color:'#64748b',marginBottom:7,textTransform:'uppercase',letterSpacing:.5}}>{label} 文字樣式</div>
+
+        {/* 顏色 + 縮放 */}
+        <div style={{display:'flex',gap:6,marginBottom:7,alignItems:'center'}}>
+          <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2,flexShrink:0}}>
+            <input type="color" value={style.color||'#ffffff'} onChange={e=>setStyle(s=>({...s,color:e.target.value}))} onBlur={saveSnap} style={{width:30,height:30,borderRadius:6,border:'2px solid #e2e8f0',padding:2,cursor:'pointer'}} />
+            <span style={{fontSize:8,color:'#94a3b8'}}>顏色</span>
           </div>
           <div style={{flex:1}}>
-            <div style={{fontSize:9,color:'#64748b',marginBottom:2}}>框寬 {style.outlineWidth||6}px</div>
-            <input type="range" min={1} max={30} value={style.outlineWidth||6} onChange={e=>setStyle(s=>({...s,outlineWidth:Number(e.target.value)}))} onMouseUp={saveSnap} style={{width:'100%',accentColor:'#f97316'}} />
+            <div style={{fontSize:9,color:'#64748b',marginBottom:2}}>個別縮放 {style.scale||100}%</div>
+            <input type="range" min={50} max={300} value={style.scale||100} onChange={e=>setStyle(s=>({...s,scale:Number(e.target.value)}))} onMouseUp={saveSnap} style={{width:'100%',accentColor:tpl.primary}} />
           </div>
         </div>
-      )}
-    </div>
-  );
+
+        {/* 粗體 / 斜體 */}
+        <div style={{display:'flex',gap:5,marginBottom:8}}>
+          <ToggleChip active={style.bold} onClick={()=>{setStyle(s=>({...s,bold:!s.bold}));saveSnap();}}>B 粗體</ToggleChip>
+          <ToggleChip active={style.italic} onClick={()=>{setStyle(s=>({...s,italic:!s.italic}));saveSnap();}}>I 斜體</ToggleChip>
+        </div>
+
+        {/* 4 種加框模式 */}
+        <div style={{fontSize:9,fontWeight:700,color:'#64748b',marginBottom:5}}>加框效果</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:4,marginBottom:8}}>
+          {MODES.map(m=>(
+            <button key={m.id} onClick={()=>{setStyle(s=>({...s,outlineStyle:m.id}));saveSnap();}} style={{padding:'6px 3px',borderRadius:7,border:`2px solid ${mode===m.id?tpl.primary:'#e2e8f0'}`,background:mode===m.id?tpl.primary+'14':'#fff',cursor:'pointer',fontFamily:'inherit',textAlign:'center'}}>
+              <div style={{fontSize:16,fontWeight:900,color:mode===m.id?tpl.primary:'#334155',lineHeight:1.1,fontFamily:'serif'}}>{m.icon}</div>
+              <div style={{fontSize:8,color:mode===m.id?tpl.primary:'#94a3b8',fontWeight:700,marginTop:2}}>{m.label}</div>
+            </button>
+          ))}
+        </div>
+
+        {/* simple / double 的顏色與寬度 */}
+        {(mode==='simple'||mode==='double')&&(
+          <div style={{background:'#fff',borderRadius:7,border:'1px solid #e2e8f0',padding:'7px 8px',display:'flex',flexDirection:'column',gap:6}}>
+            <div style={{display:'flex',gap:8,alignItems:'center'}}>
+              <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2,flexShrink:0}}>
+                <input type="color" value={style.outlineColor||'#ffffff'} onChange={e=>setStyle(s=>({...s,outlineColor:e.target.value}))} onBlur={saveSnap} style={{width:26,height:26,borderRadius:5,border:'2px solid #e2e8f0',padding:2,cursor:'pointer'}} />
+                <span style={{fontSize:8,color:'#94a3b8'}}>{mode==='double'?'外框色':'框色'}</span>
+              </div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:9,color:'#64748b',marginBottom:2}}>{mode==='double'?'外框寬':'框寬'} {style.outlineWidth||8}px</div>
+                <input type="range" min={1} max={40} value={style.outlineWidth||8} onChange={e=>setStyle(s=>({...s,outlineWidth:Number(e.target.value)}))} onMouseUp={saveSnap} style={{width:'100%',accentColor:'#f97316'}} />
+              </div>
+            </div>
+            {mode==='double'&&(
+              <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2,flexShrink:0}}>
+                  <input type="color" value={style.outlineColor2||'#333333'} onChange={e=>setStyle(s=>({...s,outlineColor2:e.target.value}))} onBlur={saveSnap} style={{width:26,height:26,borderRadius:5,border:'2px solid #e2e8f0',padding:2,cursor:'pointer'}} />
+                  <span style={{fontSize:8,color:'#94a3b8'}}>內框色</span>
+                </div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:9,color:'#64748b',marginBottom:2}}>內框寬 {style.outlineWidth2||3}px</div>
+                  <input type="range" min={1} max={20} value={style.outlineWidth2||3} onChange={e=>setStyle(s=>({...s,outlineWidth2:Number(e.target.value)}))} onMouseUp={saveSnap} style={{width:'100%',accentColor:'#6366f1'}} />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* shadow 模式的設定 */}
+        {mode==='shadow'&&(
+          <div style={{background:'#fff',borderRadius:7,border:'1px solid #e2e8f0',padding:'7px 8px',display:'flex',flexDirection:'column',gap:6}}>
+            <div style={{display:'flex',gap:8,alignItems:'center'}}>
+              <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2,flexShrink:0}}>
+                <input type="color" value={style.shadowColor||'#000000'} onChange={e=>setStyle(s=>({...s,shadowColor:e.target.value}))} onBlur={saveSnap} style={{width:26,height:26,borderRadius:5,border:'2px solid #e2e8f0',padding:2,cursor:'pointer'}} />
+                <span style={{fontSize:8,color:'#94a3b8'}}>陰影色</span>
+              </div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:9,color:'#64748b',marginBottom:2}}>模糊 {style.shadowBlurAmount||0}px</div>
+                <input type="range" min={0} max={30} value={style.shadowBlurAmount||0} onChange={e=>setStyle(s=>({...s,shadowBlurAmount:Number(e.target.value)}))} onMouseUp={saveSnap} style={{width:'100%',accentColor:'#8b5cf6'}} />
+              </div>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
+              <div>
+                <div style={{fontSize:9,color:'#64748b',marginBottom:2}}>X偏移 {style.shadowOffsetX||3}px</div>
+                <input type="range" min={-20} max={20} value={style.shadowOffsetX||3} onChange={e=>setStyle(s=>({...s,shadowOffsetX:Number(e.target.value)}))} onMouseUp={saveSnap} style={{width:'100%',accentColor:'#f43f5e'}} />
+              </div>
+              <div>
+                <div style={{fontSize:9,color:'#64748b',marginBottom:2}}>Y偏移 {style.shadowOffsetY||3}px</div>
+                <input type="range" min={-20} max={20} value={style.shadowOffsetY||3} onChange={e=>setStyle(s=>({...s,shadowOffsetY:Number(e.target.value)}))} onMouseUp={saveSnap} style={{width:'100%',accentColor:'#f43f5e'}} />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // ── 右側屬性面板 ──
   const renderCtx=()=>{
