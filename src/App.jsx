@@ -190,25 +190,26 @@ function drawTextLayer(ctx, W, H, tid, tpl, opts) {
     fn(ctx,-w/2,-h/2,w,h); ctx.restore(); return {x,y,w,h};
   };
 
-  // Logo 徽章
-  if (showLogo && brandText) {
+  // Logo 徽章 — logoText 為品牌名，brandText 為副文字，組合顯示
+  const logoFull = [logoText, brandText].filter(Boolean).join(' ');
+  if (showLogo && logoFull) {
     const sz = Math.round(18*bs);
     if (['gaming_a','gaming_b'].includes(tid)) {
       ctx.font = `italic 900 ${sz}px "${titleFont}"`;
       ctx.fillStyle = p; ctx.shadowColor = p; ctx.shadowBlur = 8;
-      ctx.fillText(brandText, 42, 50*bs); ctx.shadowBlur = 0;
+      ctx.fillText(logoFull, 42, 50*bs); ctx.shadowBlur = 0;
     } else if (tid === 'accessory_a') {
       ctx.font = `bold ${sz}px "${titleFont}"`;
-      ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fillText(brandText, 44, 50*bs);
+      ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fillText(logoFull, 44, 50*bs);
     } else if (tid === 'appliance_b') {
       ctx.font = `bold ${sz}px "${titleFont}"`;
-      ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText(brandText, W/2, 36); ctx.textAlign = 'left';
+      ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText(logoFull, W/2, 36); ctx.textAlign = 'left';
     } else {
       ctx.font = `bold ${sz}px "${titleFont}"`;
-      const lw = ctx.measureText(brandText).width + 48*bs, lh = 44*bs;
+      const lw = ctx.measureText(logoFull).width + 48*bs, lh = 44*bs;
       ctx.fillStyle = p; rr(ctx,(W-lw)/2,14,lw,lh,lh/2);
       ctx.fillStyle = '#fff'; ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText(brandText, W/2, 14+lh/2); ctx.textBaseline='alphabetic'; ctx.textAlign='left';
+      ctx.fillText(logoFull, W/2, 14+lh/2); ctx.textBaseline='alphabetic'; ctx.textAlign='left';
     }
   }
 
@@ -375,7 +376,7 @@ export default function App() {
       setIsDraftLoaded(true); setTimeout(saveSnap,120);
     })();
     const url=localStorage.getItem('ManiFactory_GAS_URL'); if(url) setGasUrl(url);
-    const key=localStorage.getItem('ManiFactory_RemoveBg_Key'); if(key){setRemoveBgApiKey(key);setEnableRemoveBgApi(true);}
+    const key=localStorage.getItem('ManiFactory_RemoveBg_Key'); if(key){setRemoveBgApiKey(key);}
     const curM=new Date().toISOString().slice(0,7);
     if(localStorage.getItem('ManiFactory_RemoveBg_Month')!==curM){localStorage.setItem('ManiFactory_RemoveBg_Month',curM);localStorage.setItem('ManiFactory_RemoveBg_Count','0');setBgRemovalCount(0);}
     else setBgRemovalCount(parseInt(localStorage.getItem('ManiFactory_RemoveBg_Count')||'0',10));
