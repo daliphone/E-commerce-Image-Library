@@ -1069,16 +1069,30 @@ export default function App() {
               ))}
             </PC>
 
-            <PC title="③ 自訂配色">
+            <PC title="③ 自訂配色（各自獨立）">
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:7,marginBottom:7}}>
-                {[['主色',tpl.primary,'primary'],['重點',tpl.accent,'accent'],['底色',tpl.bg,'bg']].map(([label,val,key])=>(
-                  <div key={key} style={{textAlign:'center'}}>
-                    <input type="color" value={val} onChange={e=>setCustomColors(p=>({...(p||{primary:tpl.primary,accent:tpl.accent,bg:tpl.bg,textCol:tpl.textCol,mode:tpl.mode}),[key]:e.target.value}))} onBlur={saveSnap} style={{width:32,height:32,borderRadius:'50%',border:'2px solid #e2e8f0',padding:2,cursor:'pointer',display:'block',margin:'0 auto 3px'}} />
+                {[
+                  ['主色', customColors?.primary||baseTpl.primary, 'primary'],
+                  ['重點', customColors?.accent||baseTpl.accent,   'accent'],
+                  ['底色', customColors?.bg||baseTpl.bg,           'bg'],
+                ].map(([label,val,key])=>(
+                  <div key={key} style={{textAlign:'center',position:'relative'}}>
+                    <input type="color" value={val}
+                      onChange={e=>setCustomColors(p=>({...(p||{}),[key]:e.target.value}))}
+                      onBlur={saveSnap}
+                      style={{width:32,height:32,borderRadius:'50%',border:'2px solid #e2e8f0',padding:2,cursor:'pointer',display:'block',margin:'0 auto 3px'}} />
                     <div style={{fontSize:9,color:'#64748b',fontWeight:600}}>{label}</div>
+                    {customColors?.[key]&&(
+                      <button onClick={()=>{setCustomColors(p=>{if(!p)return null;const n={...p};delete n[key];return Object.keys(n).length?n:null;});setTimeout(saveSnap,50);}}
+                        title="恢復此色的模板預設"
+                        style={{position:'absolute',top:-3,right:'calc(50% - 20px)',width:14,height:14,borderRadius:'50%',border:'none',background:'#ef4444',color:'#fff',fontSize:9,cursor:'pointer',fontFamily:'inherit',padding:0,fontWeight:900,lineHeight:'14px'}}>×</button>
+                    )}
                   </div>
                 ))}
               </div>
-              {customColors&&<button onClick={()=>{setCustomColors(null);setTimeout(saveSnap,50);}} style={{width:'100%',padding:'4px',borderRadius:6,border:'1px solid #e2e8f0',background:'#f8fafc',color:'#64748b',cursor:'pointer',fontFamily:'inherit',fontSize:10,fontWeight:700}}>↩ 恢復模板配色</button>}
+              {customColors&&Object.keys(customColors).length>0&&(
+                <button onClick={()=>{setCustomColors(null);setTimeout(saveSnap,50);}} style={{width:'100%',padding:'4px',borderRadius:6,border:'1px solid #e2e8f0',background:'#f8fafc',color:'#64748b',cursor:'pointer',fontFamily:'inherit',fontSize:10,fontWeight:700}}>↩ 全部恢復模板配色</button>
+              )}
             </PC>
 
             <PC title="④ 商品圖上傳（支援多圖）">
