@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 
 // ─── IndexedDB ────────────────────────────────────────────────────────────────
-const DB_NAME = 'ManiFactoryDB_V51';
+const DB_NAME = 'ManiFactoryDB_Mani';
 const STORE_NAME = 'drafts';
 const DRAFT_KEY = 'current_draft';
 const initDB = () => new Promise((res, rej) => {
@@ -9,8 +9,37 @@ const initDB = () => new Promise((res, rej) => {
   r.onupgradeneeded = e => { if (!e.target.result.objectStoreNames.contains(STORE_NAME)) e.target.result.createObjectStore(STORE_NAME); };
   r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
 });
-const saveDraft = async (s) => { try { const db = await initDB(); db.transaction(STORE_NAME,'readwrite').objectStore(STORE_NAME).put(s, DRAFT_KEY); } catch(e){} };
-const loadDraft = async () => { try { const db = await initDB(); const tx = db.transaction(STORE_NAME,'readonly'); const req = tx.objectStore(STORE_NAME).get(DRAFT_KEY); return new Promise(res => { req.onsuccess = () => res(req.result ?? null); req.onerror = () => res(null); }); } catch(e){ return null; } };
+const saveDraft = async (s) => {
+  try {
+    const db = await initDB();
+    db.transaction(STORE_NAME,'readwrite').objectStore(STORE_NAME).put(s, DRAFT_KEY);
+  } catch(e){}
+  // localStorage 備份（排除 products 圖片 base64，只存設定值）
+  try {
+    const {products, iconImage, ...light} = s;
+    localStorage.setItem('ManiFactory_draft_light', JSON.stringify(light));
+    localStorage.setItem('ManiFactory_has_draft', '1');
+  } catch(e){}
+};
+const loadDraft = async () => {
+  try {
+    const db = await initDB();
+    const tx = db.transaction(STORE_NAME,'readonly');
+    const req = tx.objectStore(STORE_NAME).get(DRAFT_KEY);
+    const result = await new Promise(res => { req.onsuccess = () => res(req.result ?? null); req.onerror = () => res(null); });
+    if (result) return result;
+    // IndexedDB 讀不到時，退回 localStorage 輕量備份（無圖片）
+    const light = localStorage.getItem('ManiFactory_draft_light');
+    if (light) return JSON.parse(light);
+    return null;
+  } catch(e){
+    try {
+      const light = localStorage.getItem('ManiFactory_draft_light');
+      if (light) return JSON.parse(light);
+    } catch(e2){}
+    return null;
+  }
+};
 
 // ─── 14 組模板 ───────────────────────────────────────────────────────────────
 const CATEGORIES = {
@@ -390,10 +419,11 @@ export default function App() {
     setTagsInput(s.tagsInput||''); setIsAiDisclosure(!!s.isAiDisclosure); setTagShape(s.tagShape||'pill');
     setShowLogo(s.showLogo!==false); setShowBrand(s.showBrand!==false); setShowTitle(s.showTitle!==false); setShowTags(s.showTags!==false);
     setTitleFont(s.titleFont||'Microsoft JhengHei'); setTagFont(s.tagFont||'Microsoft JhengHei');
-    setLogoStyle(s.logoStyle||{...defaultTextStyle(),bold:true});
-    setBrandStyle(s.brandStyle||{...defaultTextStyle(),bold:true});
-    setTitleStyle(s.titleStyle||{...defaultTextStyle(),bold:true});
-    setTagTextStyle(s.tagTextStyle||{...defaultTextStyle(),bold:true});
+    const mergeStyle = (saved) => ({...defaultTextStyle(), bold:true, ...(saved||{})});
+    setLogoStyle(mergeStyle(s.logoStyle));
+    setBrandStyle(mergeStyle(s.brandStyle));
+    setTitleStyle(mergeStyle(s.titleStyle));
+    setTagTextStyle(mergeStyle(s.tagTextStyle));
     setProductScale(s.productScale||100); setBrandScale(s.brandScale||100); setTextScale(s.textScale||100);
     setTagScale(s.tagScale||100); setIconScale(s.iconScale||30);
     setLogoOffset(s.logoOffset||{x:0,y:0}); setBrandOffset(s.brandOffset||{x:0,y:40});
@@ -408,11 +438,21 @@ export default function App() {
   const handleRedo=()=>{if(histIdx.current<histRef.current.length-1){histIdx.current++;applySnap(histRef.current[histIdx.current]);}};
 
   // ── 初始化 ──
+  // hasDraftRef：防止草稿載入期間（setState 尚未完成）的空白 buildSnap 覆蓋 IndexedDB
+  const hasDraftRef = useRef(false);
   useEffect(()=>{
     (async()=>{
       const draft=await loadDraft();
-      if(draft){try{applySnap(draft);setCloudMsg({text:'✅ 已還原草稿',type:'success'});setTimeout(()=>setCloudMsg({text:'',type:''}),3000);}catch(e){}}
-      setIsDraftLoaded(true); setTimeout(saveSnap,120);
+      if(draft){
+        hasDraftRef.current = true;
+        try{
+          applySnap(draft);
+          setCloudMsg({text:'✅ 已還原上次草稿',type:'success'});
+          setTimeout(()=>setCloudMsg({text:'',type:''}),3000);
+        }catch(e){ hasDraftRef.current = false; }
+      }
+      // 延遲開啟 auto-save，讓所有 setState 的 re-render 完成後才開始監聽
+      setTimeout(()=>{ setIsDraftLoaded(true); }, 300);
     })();
     const url=localStorage.getItem('ManiFactory_GAS_URL'); if(url) setGasUrl(url);
     const key=localStorage.getItem('ManiFactory_RemoveBg_Key'); if(key) setRemoveBgApiKey(key);
@@ -423,6 +463,8 @@ export default function App() {
 
   useEffect(()=>{
     if(!isDraftLoaded)return;
+    // 首次觸發時（hasDraftRef 尚為 true）跳過，等第二次 re-render（用戶實際編輯）才存
+    if(hasDraftRef.current){ hasDraftRef.current = false; return; }
     const t=setTimeout(()=>saveDraft(buildSnap()),1200);
     return()=>clearTimeout(t);
   },[isDraftLoaded,products,templateId,activeCategory,platform,removeBg,logoText,brandText,promoText,tagsInput,isAiDisclosure,tagShape,showLogo,showBrand,showTitle,showTags,titleFont,tagFont,logoStyle,brandStyle,titleStyle,tagTextStyle,productScale,brandScale,textScale,tagScale,iconScale,logoOffset,brandOffset,titleOffset,iconOffset,tagOffsets,rotations,layerOrder,tagCustomColors,customColors,iconImage]);
